@@ -1,0 +1,2351 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>Event Viewer Analyzer</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/charts/loader.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#1e293b;--text-muted:#64748b;--primary:#2563eb;--primary-light:#dbeafe;--danger:#ef4444;--warning:#f59e0b;--success:#22c55e;--info:#3b82f6;--critical-bg:#fef2f2;--error-bg:#fff7ed;--warning-bg:#fffbeb;--info-bg:#eff6ff}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);line-height:1.5;font-size:13px}
+.container{max-width:1400px;margin:0 auto;padding:16px}
+
+/* Header */
+.header{background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%);color:#fff;padding:20px 24px;border-radius:12px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between}
+.header h1{font-size:18px;font-weight:800;letter-spacing:-0.5px}
+.header p{font-size:11px;color:#94a3b8;margin-top:2px}
+.header-badge{font-size:10px;background:rgba(59,130,246,0.2);color:#93c5fd;padding:4px 10px;border-radius:6px;font-weight:600;border:1px solid rgba(59,130,246,0.3)}
+
+/* Tabs */
+.tabs{display:flex;gap:4px;margin-bottom:16px;background:var(--card);padding:4px;border-radius:10px;border:1px solid var(--border)}
+.tab{flex:1;padding:8px;text-align:center;font-size:11px;font-weight:700;border-radius:8px;cursor:pointer;transition:all .2s;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted)}
+.tab:hover{background:#f8fafc}
+.tab.active{background:var(--primary);color:#fff;box-shadow:0 2px 8px rgba(37,99,235,0.3)}
+
+/* Cards */
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.04)}
+.card-header{padding:12px 16px;background:#f8fafc;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.card-header h3{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text)}
+.card-body{padding:16px}
+
+/* Upload Zone */
+.upload-zone{border:2px dashed var(--border);border-radius:12px;padding:32px;text-align:center;cursor:pointer;transition:all .3s}
+.upload-zone:hover,.upload-zone.drag-over{border-color:var(--primary);background:var(--primary-light)}
+.upload-zone h3{font-size:14px;font-weight:700;margin:8px 0 4px}
+.upload-zone p{font-size:11px;color:var(--text-muted)}
+
+/* Stats Grid */
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center}
+.stat-card .value{font-size:24px;font-weight:800}
+.stat-card .label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;font-weight:600}
+.stat-critical .value{color:var(--danger)}
+.stat-error .value{color:#f97316}
+.stat-warning .value{color:var(--warning)}
+.stat-info .value{color:var(--info)}
+
+/* Table */
+.log-table{width:100%;border-collapse:collapse;font-size:12px}
+.log-table thead th{padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;color:var(--text-muted);background:#f8fafc;border-bottom:1px solid var(--border)}
+.log-table tbody tr{border-bottom:1px solid #f1f5f9;cursor:pointer;transition:background .15s}
+.log-table tbody tr:hover{background:#f8fafc}
+.log-table tbody tr.selected{background:var(--primary-light)}
+.log-table td{padding:8px 12px;vertical-align:middle}
+
+/* Badges */
+.badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;display:inline-block}
+.badge-critical{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+.badge-error{background:#fff7ed;color:#9a3412;border:1px solid #fed7aa}
+.badge-warning{background:#fffbeb;color:#92400e;border:1px solid #fde68a}
+.badge-info{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe}
+.badge-eventid{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;font-family:monospace}
+
+/* Buttons */
+.btn{padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;border:none;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:#1d4ed8;box-shadow:0 2px 8px rgba(37,99,235,0.3)}
+.btn-primary:disabled{opacity:0.5;cursor:not-allowed}
+.btn-secondary{background:#f1f5f9;color:var(--text);border:1px solid var(--border)}
+.btn-secondary:hover{background:#e2e8f0}
+.btn-sm{padding:4px 10px;font-size:11px}
+
+/* Detail Panel */
+.detail-panel{max-height:600px;overflow-y:auto}
+.detail-row{display:flex;padding:8px 16px;border-bottom:1px solid #f1f5f9}
+.detail-label{width:120px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);flex-shrink:0}
+.detail-value{flex:1;font-size:12px;word-break:break-word}
+.detail-message{white-space:pre-wrap;font-family:monospace;font-size:11px;background:#f8fafc;padding:12px;border-radius:8px;border:1px solid var(--border);max-height:200px;overflow-y:auto}
+
+/* Progress Bar */
+.progress-bar{width:100%;height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden;margin:8px 0}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--primary),#7c3aed);border-radius:3px;transition:width .3s}
+
+/* Filter Row */
+.filter-row{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+.filter-row input[type="text"]{flex:1;min-width:200px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-family:'Inter',sans-serif}
+.filter-row select{padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--card);font-family:'Inter',sans-serif}
+.filter-row label{font-size:11px;font-weight:600;display:flex;align-items:center;gap:4px;cursor:pointer}
+
+/* Pagination */
+.pagination{display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:#f8fafc;border-top:1px solid var(--border);font-size:11px}
+.pagination span{color:var(--text-muted)}
+.pagination .page-info{font-weight:700;color:var(--text)}
+
+/* AI Section */
+.ai-section{margin-top:16px}
+.ai-result{background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:16px;font-size:12px;line-height:1.7;max-height:500px;overflow-y:auto;white-space:pre-wrap;font-family:'Inter',sans-serif}
+.ai-result h1,.ai-result h2,.ai-result h3{margin:12px 0 6px;font-weight:700}
+.ai-result h3{font-size:14px}
+.ai-result strong{font-weight:700}
+.ai-result code{background:#e2e8f0;padding:1px 4px;border-radius:3px;font-family:monospace;font-size:11px}
+.ai-result pre{background:#1e293b;color:#e2e8f0;padding:12px;border-radius:8px;overflow-x:auto;margin:8px 0}
+.ai-result pre code{background:transparent;color:inherit}
+
+/* Charts */
+.charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.chart-container{min-height:280px}
+
+/* Directory */
+.dir-item{padding:12px 16px;border-bottom:1px solid #f1f5f9;cursor:pointer;transition:background .15s}
+.dir-item:hover{background:#f8fafc}
+.dir-item-title{font-weight:700;font-size:13px}
+.dir-item-code{font-family:monospace;font-size:11px;color:var(--primary);font-weight:600}
+.dir-item-desc{font-size:11px;color:var(--text-muted);margin-top:4px}
+.dir-item-rec{font-size:11px;color:#059669;margin-top:4px;font-weight:500}
+
+/* API Key Modal */
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:1000}
+.modal{background:var(--card);border-radius:12px;padding:24px;width:90%;max-width:450px;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
+.modal h3{font-size:16px;font-weight:700;margin-bottom:12px}
+.modal input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin:8px 0;font-family:'Inter',sans-serif}
+.modal .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+
+/* Responsive */
+.split-grid{display:grid;grid-template-columns:7fr 5fr;gap:16px;align-items:start}
+@media(max-width:1024px){.split-grid{grid-template-columns:1fr}.stats-grid{grid-template-columns:repeat(2,1fr)}.charts-grid{grid-template-columns:1fr}}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:#f1f5f9}
+::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:#94a3b8}
+
+/* Scenario selector */
+.scenario-bar{display:flex;gap:8px;margin-bottom:16px;overflow-x:auto;padding-bottom:4px}
+.scenario-btn{white-space:nowrap;padding:8px 14px;border-radius:8px;font-size:11px;font-weight:600;border:1px solid var(--border);background:var(--card);cursor:pointer;transition:all .2s}
+.scenario-btn:hover{border-color:var(--primary)}
+.scenario-btn.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+
+/* Checkbox pills */
+.sev-pills{display:flex;gap:4px;flex-wrap:wrap}
+.sev-pill{font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;cursor:pointer;border:1px solid var(--border);transition:all .2s}
+.sev-pill.on{opacity:1}.sev-pill.off{opacity:0.4}
+.sev-pill-crit{background:#fef2f2;color:#991b1b;border-color:#fecaca}
+.sev-pill-err{background:#fff7ed;color:#9a3412;border-color:#fed7aa}
+.sev-pill-warn{background:#fffbeb;color:#92400e;border-color:#fde68a}
+.sev-pill-info{background:#eff6ff;color:#1e40af;border-color:#bfdbfe}
+
+.hidden{display:none!important}
+.upload-status{font-size:11px;color:var(--text-muted);margin-top:8px;font-weight:500}
+
+/* Date Range Picker */
+.date-range-picker{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.date-input{padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-family:'Inter',sans-serif;background:var(--card);color:var(--text);cursor:pointer}
+.date-input:focus{outline:none;border-color:var(--primary)}
+.date-range-sep{font-size:12px;color:var(--text-muted);font-weight:600;padding:0 2px}
+.preset-btn{padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:11px;font-weight:700;background:var(--card);color:var(--text-muted);cursor:pointer;transition:all .2s}
+.preset-btn:hover{border-color:var(--primary);color:var(--primary)}
+.preset-btn.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+.date-range-error{font-size:11px;color:#dc2626;font-weight:600;padding:4px 8px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;margin-top:4px}
+
+/* Mobile Responsiveness Improvements */
+@media (max-width: 768px) {
+  .container { padding: 8px; }
+  .header { flex-direction: column; text-align: center; gap: 8px; padding: 16px; border-radius: 8px; }
+  .header h1 { font-size: 16px; }
+  .tabs { flex-wrap: wrap; gap: 4px; padding: 4px; }
+  .tab { flex: 1 1 45%; padding: 10px 4px; font-size: 11px; } 
+  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 6px; }
+  .stat-card { padding: 10px; }
+  .stat-card .value { font-size: 20px; }
+  
+  .filter-row { flex-direction: column; align-items: stretch; gap: 12px; }
+  .filter-row > * { width: 100%; box-sizing: border-box; }
+  .filter-row input[type="text"], .filter-row select { font-size: 14px; padding: 10px; width: 100%; }
+  
+  .date-range-picker { flex-wrap: wrap; gap: 6px; justify-content: space-between; }
+  .date-input { flex: 1 1 40%; font-size: 13px; padding: 10px; }
+  .preset-btn { flex: 1 1 20%; font-size: 11px; padding: 10px 4px; text-align: center; }
+  .date-range-sep { display: none; }
+  
+  .card-header { flex-direction: column; gap: 8px; align-items: flex-start; }
+  .btn { width: 100%; justify-content: center; padding: 12px; font-size: 13px; margin-bottom: 6px; }
+  
+  .log-table { display: block; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; }
+  .log-table td, .log-table th { padding: 10px 8px; }
+  
+  .scenario-bar { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 8px; -webkit-overflow-scrolling: touch; }
+  .scenario-btn { padding: 10px 14px; font-size: 12px; flex-shrink: 0; }
+  
+  .detail-row { flex-direction: column; gap: 4px; padding: 12px 16px; }
+  .detail-label { width: 100%; font-size: 11px; color: var(--text-muted); }
+  .detail-value { font-size: 13px; }
+  
+  .ai-section > div { flex-wrap: wrap; }
+  .ai-section .btn { flex: 1 1 100%; }
+  .ai-result { padding: 12px; font-size: 13px; }
+
+  .sev-pills { justify-content: space-between; }
+  .sev-pill { flex: 1; text-align: center; padding: 8px 4px; font-size: 11px; }
+}
+
+/* Global Loading Overlay */
+.loading-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,23,42,0.85);backdrop-filter:blur(4px);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;color:#fff}
+.spinner{width:40px;height:40px;border:4px solid rgba(255,255,255,0.2);border-top-color:#3b82f6;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* AI Chat Assistant */
+.chat-fab { position: fixed; bottom: 24px; right: 24px; width: 60px; height: 60px; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 28px; cursor: pointer; box-shadow: 0 4px 12px rgba(37,99,235,0.4); z-index: 1000; transition: transform 0.2s; }
+.chat-fab:hover { transform: scale(1.05); }
+.chat-window { position: fixed; bottom: 100px; right: 24px; width: 350px; height: 500px; background: var(--card); border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); display: flex; flex-direction: column; z-index: 1000; overflow: hidden; border: 1px solid var(--border); transform-origin: bottom right; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+.chat-window.hidden { opacity: 0; transform: scale(0.8); pointer-events: none; }
+.chat-header { background: var(--primary); color: #fff; padding: 16px; display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 15px; }
+.chat-close { cursor: pointer; font-size: 18px; line-height: 1; padding: 4px; opacity: 0.8; }
+.chat-close:hover { opacity: 1; }
+.chat-messages { flex: 1; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; background: #f8fafc; }
+.chat-bubble { max-width: 85%; padding: 10px 14px; border-radius: 12px; font-size: 13px; line-height: 1.5; word-wrap: break-word; }
+.chat-bubble.user { align-self: flex-end; background: var(--primary); color: #fff; border-bottom-right-radius: 2px; }
+.chat-bubble.ai { align-self: flex-start; background: #fff; color: var(--text); border: 1px solid var(--border); border-bottom-left-radius: 2px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+.chat-input-area { padding: 12px; border-top: 1px solid var(--border); background: var(--card); display: flex; gap: 8px; }
+.chat-input { flex: 1; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; font-family: 'Inter', sans-serif; resize: none; max-height: 80px; outline: none; }
+.chat-input:focus { border-color: var(--primary); }
+.btn-send { background: var(--primary); color: #fff; border: none; border-radius: 8px; width: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: opacity 0.2s; }
+.btn-send:hover { opacity: 0.9; }
+.btn-send:disabled { background: var(--border); cursor: not-allowed; }
+.typing-indicator { font-size: 12px; color: var(--text-muted); font-style: italic; padding: 0 16px 8px; display: none; background: #f8fafc; }
+@media (max-width: 400px) { .chat-window { width: calc(100% - 32px); height: calc(100% - 120px); right: 16px; bottom: 100px; } }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Header -->
+  <div class="header">
+    <div>
+      <h1>🛡️ Event Viewer Analyzer</h1>
+      <p>Google Apps Script Edition — Enterprise Windows Log Forensics</p>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span class="header-badge hidden" id="historyBadge" style="background:#f59e0b;color:#fff;border-color:#b45309" title="Klik untuk lihat riwayat" onclick="alert(this.getAttribute('data-msg'))">⚠️ Server Berisiko</span>
+      <span class="header-badge" id="kbBadge">📚 KB: Loading...</span>
+      <button class="btn btn-sm" style="background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.2)" onclick="showApiKeyModal()">🔑 API Key</button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <div class="tab active" data-tab="explorer" onclick="switchTab('explorer')">🔍 Explorer</div>
+    <div class="tab" data-tab="info" onclick="switchTab('info')">ℹ️ Info Error</div>
+    <div class="tab" data-tab="summary" onclick="switchTab('summary')">📋 Summary</div>
+    <div class="tab" data-tab="laporan" onclick="switchTab('laporan')">📝 Laporan Cerdas</div>
+    <div class="tab" data-tab="kb" onclick="switchTab('kb')">📚 Knowledge Base</div>
+    <div class="tab" data-tab="directory" onclick="switchTab('directory')">📖 Direktori Kode</div>
+    <div class="tab" data-tab="analytics" onclick="switchTab('analytics')">📊 Analitik</div>
+  </div>
+
+  <!-- TAB: Laporan Cerdas -->
+  <div id="tab-laporan" style="display:none; padding: 20px;">
+    <div class="card" style="margin-bottom: 20px;">
+      <h2>📝 Laporan Kendala (Offline Intelligence)</h2>
+      <p style="color:var(--text-muted); font-size:13px; margin-bottom: 16px;">
+        Laporan heuristik cerdas ini dihasilkan langsung tanpa koneksi internet menggunakan Knowledge Base lokal yang kaya.
+      </p>
+      <button class="btn btn-primary" onclick="generateLaporanCerdas()">
+        🔄 Buat / Perbarui Laporan
+      </button>
+      <span id="laporanStatus" style="margin-left:12px; font-weight:bold; font-size:13px;"></span>
+    </div>
+    
+    <div class="card" style="min-height: 400px; display: flex; flex-direction: column;">
+      <div id="laporanResult" class="markdown-body" style="flex: 1; padding: 20px; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; line-height: 1.6; overflow-y: auto;">
+        <div style="text-align:center; color:var(--text-muted); padding: 40px;">
+          Klik tombol di atas untuk membuat laporan diagnostik.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: Explorer -->
+  <div id="tab-explorer">
+    <!-- Scenario Bar -->
+    <div class="scenario-bar" id="scenarioBar"></div>
+
+    <!-- Device Metadata Widget -->
+    <div id="deviceMetadataWidget" class="card" style="background: linear-gradient(135deg, #1e293b 0%, #334155 100%); color: #fff; display: none; margin-bottom: 16px;">
+      <div class="card-title" style="color: #94a3b8; border-bottom: 1px solid #475569; padding-bottom: 8px; font-size:11px; font-weight:bold; letter-spacing:1px; padding:12px 16px;">
+        💻 SPESIFIKASI, PENGATURAN & BEBAN DEVICE TARGET
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; font-size: 11px; padding:16px;">
+        <div><strong>Nama Host:</strong> <br><span id="metaHost" style="color:#6ee7b7; font-weight:600; font-size:13px;">-</span></div>
+        <div><strong>Sistem Operasi:</strong> <br><span id="metaOS" style="font-size:12px">-</span></div>
+        <div><strong>Total RAM Fisik:</strong> <br><span id="metaRAM" style="font-size:12px">-</span></div>
+        <div><strong>Sisa Drive C:</strong> <br><span id="metaDisk" style="font-size:12px">-</span></div>
+        <div><strong>Beban CPU Saat Ini:</strong> <br><span id="metaCpuLoad" style="color:#fcd34d; font-weight:700; font-size:14px;">-</span></div>
+        <div><strong>Beban RAM Saat Ini:</strong> <br><span id="metaRamLoad" style="color:#fcd34d; font-weight:700; font-size:14px;">-</span></div>
+        <div><strong>Arsitektur OS:</strong> <br><span id="metaArch" style="font-size:12px">-</span></div>
+        <div><strong>Kesehatan Awal:</strong> <br><span id="metaInitialHealth" class="badge" style="background:#22c55e;color:#fff;border:none">Good</span></div>
+      </div>
+    </div>
+
+    <!-- Upload Zone -->
+    <div class="upload-zone" id="uploadZone" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)" onclick="document.getElementById('fileInput').click()">
+      <div style="font-size:32px">📂</div>
+      <h3>Seret & Lepas File Log Di Sini</h3>
+      <p>Mendukung format: .json (Diagnostic), .xml, .csv, .txt</p>
+      <p style="margin-top:4px;font-size:10px;color:#94a3b8">⚠️ File .evtx tidak didukung di versi Web. Silakan gunakan Collector.ps1 atau ekspor ke XML/CSV.</p>
+      <input type="file" id="fileInput" multiple accept=".json,.xml,.csv,.txt,.log" style="display:none" onchange="handleFileSelect(event)">
+    </div>
+    <div id="uploadStatus" class="upload-status"></div>
+    <div id="progressContainer" class="hidden"><div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div></div>
+
+    <!-- Filters -->
+    <div class="filter-row" style="margin-top:12px">
+      <div style="position:relative;flex:1;min-width:200px">
+        <input type="text" id="searchInput" placeholder="🔍 Cari sumber, pesan, atau Event ID..." oninput="applyFilters()" style="width:100%;padding-right:30px;box-sizing:border-box">
+        <span onclick="document.getElementById('searchInput').value='';applyFilters()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--text-muted);font-weight:bold;font-size:16px" title="Reset Pencarian">&times;</span>
+      </div>
+      <select id="channelFilter" onchange="applyFilters()">
+        <option value="All">Semua Channel</option>
+        <option value="System">System</option>
+        <option value="Application">Application</option>
+        <option value="Security">Security</option>
+      </select>
+      <label><input type="checkbox" id="chkFastScan" checked> Mode Pindai Cepat</label>
+      <div class="date-range-picker">
+        <input type="date" id="dateStart" class="date-input" oninput="handleDateInput()">
+        <span class="date-range-sep">–</span>
+        <input type="date" id="dateEnd" class="date-input" oninput="handleDateInput()">
+        <button class="preset-btn active" id="preset30m" onclick="applyPreset('30m')">30M</button>
+        <button class="preset-btn" id="preset1h" onclick="applyPreset('1h')">1J</button>
+        <button class="preset-btn" id="preset3h" onclick="applyPreset('3h')">3J</button>
+        <button class="preset-btn" id="presetall" onclick="applyPreset('all')">Semua</button>
+      </div>
+      <div id="dateRangeError" class="date-range-error hidden">Pilihan rentang waktu tidak valid (Mulai > Akhir)</div>
+    </div>
+    <div class="sev-pills" style="margin-bottom:12px">
+      <span class="sev-pill sev-pill-crit on" data-sev="Critical" onclick="toggleSev(this)">🚨 Critical</span>
+      <span class="sev-pill sev-pill-err on" data-sev="Error" onclick="toggleSev(this)">⚠️ Error</span>
+      <span class="sev-pill sev-pill-warn on" data-sev="Warning" onclick="toggleSev(this)">🔔 Warning</span>
+      <span class="sev-pill sev-pill-info on" data-sev="Information" onclick="toggleSev(this)">ℹ️ Info</span>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid" id="statsGrid">
+      <div class="stat-card stat-critical"><div class="value" id="statCrit">0</div><div class="label">Critical</div></div>
+      <div class="stat-card stat-error"><div class="value" id="statErr">0</div><div class="label">Error</div></div>
+      <div class="stat-card stat-warning"><div class="value" id="statWarn">0</div><div class="label">Warning</div></div>
+      <div class="stat-card stat-info"><div class="value" id="statInfo">0</div><div class="label">Information</div></div>
+    </div>
+    
+    <!-- Hardware & Resource Health / MITRE -->
+    <div id="healthAndMitrePanel" class="hidden" style="margin:16px 0;display:grid;grid-template-columns:1fr 2fr;gap:16px;">
+      <div class="card" style="padding:16px;text-align:center">
+        <h4 style="margin:0 0 8px 0;font-size:13px;color:var(--text-muted)">Skor Kesehatan I/O & Sistem</h4>
+        <div style="font-size:32px;font-weight:900" id="healthScoreVal">100%</div>
+        <div style="width:100%;height:8px;background:var(--bg-lighter);border-radius:4px;margin-top:8px;overflow:hidden">
+          <div id="healthScoreBar" style="width:100%;height:100%;background:#10b981"></div>
+        </div>
+      </div>
+      <div class="card" style="padding:16px;">
+        <h4 style="margin:0 0 8px 0;font-size:13px;color:var(--text-muted)">Peta Ancaman MITRE ATT&CK</h4>
+        <div id="mitreCards" style="display:flex;flex-direction:column;gap:8px;max-height:100px;overflow-y:auto">
+          <!-- injected by JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- AI Analysis -->
+    <div class="ai-section">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <button class="btn btn-primary" id="btnAnalyze" onclick="runAiAnalysis()">✨ Jalankan Analisis</button>
+        <label style="font-size:11px;font-weight:600;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="chkEnableAi"> Aktifkan AI API (Gemini/OpenAI)</label>
+        <button class="btn btn-secondary btn-sm hidden" id="btnCopy" onclick="copyAiReport()">📋 Salin</button>
+        <button class="btn btn-secondary btn-sm hidden" id="btnDownload" onclick="downloadAiReport()">💾 Unduh .md</button>
+        <button class="btn btn-secondary btn-sm hidden" id="btnDocs" onclick="exportToDocs()" style="border-color:#3b82f6;color:#2563eb">📄 Simpan ke Docs</button>
+        <button class="btn btn-secondary btn-sm hidden" id="btnAlert" onclick="showEmailModal()" style="border-color:#ef4444;color:#dc2626">📧 Email Alert Tim</button>
+      </div>
+      <div id="analysisProgress" class="hidden"><div class="progress-bar"><div class="progress-fill" id="analysisFill" style="width:0%"></div></div><p style="font-size:10px;color:var(--text-muted);margin-top:4px" id="analysisLabel">Menganalisis...</p></div>
+      
+      <!-- Auto Remediation Script Box -->
+      <div id="remediationScriptBox" class="hidden" style="margin-bottom:12px;background:#1e1e1e;border-radius:8px;overflow:hidden;border:1px solid #333">
+        <div style="background:#2d2d2d;padding:8px 12px;display:flex;justify-content:space-between;align-items:center">
+          <span style="color:#d4d4d4;font-size:11px;font-weight:600">🛠️ Auto-Remediation Script (PowerShell)</span>
+          <button class="btn btn-secondary btn-sm" onclick="copyRemediationScript()" id="btnCopyScript" style="border-color:#4caf50;color:#4caf50;padding:2px 8px;font-size:10px">Salin Skrip</button>
+        </div>
+        <pre style="margin:0;padding:12px;color:#dcdcaa;font-size:12px;overflow-x:auto" id="remediationCode"></pre>
+      </div>
+
+      <div id="aiResult" class="ai-result hidden"></div>
+    </div>
+
+    <!-- Split: Table + Detail -->
+    <div class="split-grid" style="margin-top:16px">
+      <div class="card">
+        <div class="card-header">
+          <h3>📋 Daftar Kejadian Log (<span id="logCount">0</span>)</h3>
+          <span style="font-size:10px;color:var(--text-muted);font-weight:600" id="timeframeLabel">Timeframe: 1 Jam Terakhir</span>
+        </div>
+        <div style="overflow-y:auto;max-height:460px;min-height:200px" id="tableContainer">
+          <table class="log-table">
+            <thead><tr><th>Tingkat</th><th>Waktu</th><th>Event ID</th><th>Sumber / Channel</th></tr></thead>
+            <tbody id="logTableBody"></tbody>
+          </table>
+        </div>
+        <div class="pagination" id="paginationBar">
+          <span>Menampilkan <span id="pageRange">0-0</span> dari <span id="pageTotal">0</span></span>
+          <div style="display:flex;gap:6px;align-items:center">
+            <button class="btn btn-secondary btn-sm" id="btnPrev" onclick="prevPage()">Sebelumnya</button>
+            <span class="page-info" id="pageNum">Hal 1</span>
+            <button class="btn btn-secondary btn-sm" id="btnNext" onclick="nextPage()">Selanjutnya</button>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="position:sticky;top:16px">
+        <div class="card-header"><h3>🔎 Detail Bukti Kejadian</h3></div>
+        <div class="detail-panel" id="detailPanel">
+          <div style="padding:40px;text-align:center;color:var(--text-muted)">
+            <p style="font-size:24px">📄</p>
+            <p style="font-size:12px;font-weight:600;margin-top:8px">Klik salah satu log untuk melihat detailnya</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: Info Error -->
+  <div id="tab-info" class="hidden">
+    <div style="display:flex; flex-direction:column; gap:20px;">
+      <div class="card">
+        <div class="card-header">
+          <h3>🔥 Top Error Event IDs (Report)</h3>
+        </div>
+        <div style="overflow-y:auto;max-height:500px">
+          <table class="log-table">
+            <thead><tr><th style="width:80px">Event ID</th><th style="width:120px">Level & Kategori</th><th>Keterangan Asli (Dari Event Viewer)</th><th style="width:80px;text-align:center">Jumlah</th></tr></thead>
+            <tbody id="topErrorTableBody">
+              <tr><td colspan="4" style="text-align:center;padding:16px;color:var(--text-muted)">Pilih file log terlebih dahulu</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <div class="card">
+        <div class="card-header">
+          <h3>🔝 Top 10 Event ID Terbanyak (Semua Log)</h3>
+        </div>
+        <div style="overflow-y:auto;max-height:350px">
+          <table class="log-table">
+            <thead><tr><th style="width:120px">Event ID</th><th style="width:80px;text-align:center">Jumlah (Count)</th></tr></thead>
+            <tbody id="topAllEventTableBody">
+              <tr><td colspan="2" style="text-align:center;padding:16px;color:var(--text-muted)">Pilih file log terlebih dahulu</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h3>💥 Top Exception Code / Detail Crash</h3>
+        </div>
+        <div style="overflow-y:auto;max-height:450px">
+          <table class="log-table">
+            <thead><tr><th>Exception Code / Pesan Gangguan Asli</th><th style="width:80px;text-align:center">Jumlah</th></tr></thead>
+            <tbody id="topExceptionTableBody">
+              <tr><td colspan="2" style="text-align:center;padding:16px;color:var(--text-muted)">Pilih file log terlebih dahulu</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: Directory -->
+  <div id="tab-directory" class="hidden">
+    <div class="card">
+      <div class="card-header">
+        <h3>📖 Direktori Kode Defender & Windows</h3>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="dirSearch" placeholder="Cari kode..." style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;width:200px" oninput="filterDirectory()">
+          <select id="dirType" onchange="filterDirectory()" style="padding:6px;border:1px solid var(--border);border-radius:6px;font-size:12px">
+            <option value="All">Semua</option><option value="Event ID">Event ID</option><option value="HRESULT">HRESULT</option>
+          </select>
+        </div>
+      </div>
+      <div style="max-height:600px;overflow-y:auto" id="dirList"></div>
+    </div>
+  </div>
+
+  <!-- TAB: Analytics -->
+  <div id="tab-analytics" class="hidden">
+    <div class="charts-grid">
+      <div class="card"><div class="card-header"><h3>📊 Distribusi Tingkat Keparahan</h3></div><div class="card-body"><div id="chartSeverity" class="chart-container"></div></div></div>
+      <div class="card"><div class="card-header"><h3>📈 Kategori Kejadian Teratas</h3></div><div class="card-body"><div id="chartCategory" class="chart-container"></div></div></div>
+    </div>
+    <div class="card" style="margin-top:16px"><div class="card-header"><h3>🔝 Top 10 Event ID Terbanyak</h3></div><div class="card-body"><div id="chartEventId" class="chart-container"></div></div></div>
+    <div class="card" style="margin-top:16px"><div class="card-header"><h3>📉 Timeline Kejadian</h3></div><div class="card-body"><div id="chartTimeline" class="chart-container"></div></div></div>
+  </div>
+
+  <!-- TAB: Summary -->
+  <div id="tab-summary" class="hidden">
+    <div class="card">
+      <div class="card-header" style="justify-content:space-between; flex-wrap:wrap;">
+        <h3 style="margin-bottom:8px;">📋 Summary Event ID Unik</h3>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <input type="text" id="summarySearch" placeholder="Cari Event ID atau Deskripsi..." oninput="renderSummaryTab()" style="padding:6px; border-radius:4px; border:1px solid var(--border);" />
+          <button class="btn btn-secondary btn-sm" id="btnShowAllKB" onclick="showAllKB()">Lihat Semua KB</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <p style="color:var(--text-muted); font-size:12px; margin-bottom:12px;">Total <strong id="summaryUniqueCount">0</strong> Event ID unik terdeteksi.</p>
+        <div class="log-table-container">
+          <table class="log-table">
+            <thead>
+              <tr>
+                <th onclick="sortSummary('eventId')" style="cursor:pointer;width:80px">Event ID ↕</th>
+                <th onclick="sortSummary('count')" style="cursor:pointer;width:80px">Jumlah ↕</th>
+                <th onclick="sortSummary('maxSeverity')" style="cursor:pointer;width:120px">Severity Tertinggi ↕</th>
+                <th onclick="sortSummary('category')" style="cursor:pointer;width:150px">Kategori ↕</th>
+                <th style="width:250px">Deskripsi KB</th>
+                <th style="width:250px">Mitigasi</th>
+                <th style="width:100px">MITRE Tactic</th>
+              </tr>
+            </thead>
+            <tbody id="summaryTableBody">
+              <tr><td colspan="7" style="text-align:center;padding:16px;color:var(--text-muted)">Pilih file log terlebih dahulu</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <!-- TAB: KB -->
+  <div id="tab-kb" class="hidden">
+    <div class="card">
+      <div class="card-header" style="justify-content:space-between; flex-wrap:wrap;">
+        <h3 style="margin-bottom:8px;">📚 Knowledge Base Lokal</h3>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button class="btn btn-secondary btn-sm" id="btnKbSync" onclick="loadKBTab()">🔄 Sinkronisasi Ulang</button>
+          <button class="btn btn-primary btn-sm" onclick="openAddForm()">➕ Tambah Entri</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div id="kbErrorBanner" class="hidden" style="background:#fef2f2; color:#dc2626; padding:10px; border-radius:6px; margin-bottom:16px; font-size:12px; font-weight:500;"></div>
+        
+        <div style="display:flex; gap:16px; margin-bottom:16px; background:#f8fafc; padding:12px; border-radius:8px; border:1px solid var(--border); overflow-x:auto;">
+          <div><span style="font-size:11px; color:var(--text-muted); display:block;">Total Entri</span><strong id="kbStatTotal" style="font-size:16px; color:var(--primary);">0</strong></div>
+          <div style="width:1px; background:var(--border);"></div>
+          <div><span style="font-size:11px; color:var(--text-muted); display:block;">Critical</span><strong id="kbStatCritical" style="font-size:16px; color:var(--danger);">0</strong></div>
+          <div><span style="font-size:11px; color:var(--text-muted); display:block;">High</span><strong id="kbStatHigh" style="font-size:16px; color:#eab308;">0</strong></div>
+          <div><span style="font-size:11px; color:var(--text-muted); display:block;">Medium</span><strong id="kbStatMedium" style="font-size:16px; color:#f97316;">0</strong></div>
+          <div><span style="font-size:11px; color:var(--text-muted); display:block;">Low</span><strong id="kbStatLow" style="font-size:16px; color:#3b82f6;">0</strong></div>
+          <div><span style="font-size:11px; color:var(--text-muted); display:block;">Unknown</span><strong id="kbStatUnknown" style="font-size:16px; color:var(--text-muted);">0</strong></div>
+        </div>
+
+        <div style="display:flex; gap:8px; margin-bottom:12px;">
+          <input type="text" id="kbSearch" placeholder="Cari Event ID atau Deskripsi..." oninput="applyKBFilters()" style="flex:1; padding:8px 12px; border-radius:6px; border:1px solid var(--border); font-size:12px;" />
+          <select id="kbCritFilter" onchange="applyKBFilters()" style="padding:8px 12px; border-radius:6px; border:1px solid var(--border); font-size:12px;">
+            <option value="All">Semua Severity</option>
+            <option value="Critical">Critical</option>
+            <option value="High">High</option>
+            <option value="Medium">Medium</option>
+            <option value="Low">Low</option>
+            <option value="Unknown">Unknown</option>
+          </select>
+        </div>
+
+        <div id="kbAddForm" class="hidden" style="background:#f0f9ff; border:1px solid #bae6fd; padding:16px; border-radius:8px; margin-bottom:16px;">
+          <h4 style="margin:0 0 12px 0; color:#0369a1; font-size:14px;">➕ Tambah Entri Baru</h4>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div><label style="font-size:11px; font-weight:600;">Event ID*</label><input type="text" id="addEventId" style="width:100%; padding:6px; border:1px solid #bae6fd; border-radius:4px;"></div>
+            <div><label style="font-size:11px; font-weight:600;">Legacy Event ID</label><input type="text" id="addLegacyEventId" style="width:100%; padding:6px; border:1px solid #bae6fd; border-radius:4px;"></div>
+            <div><label style="font-size:11px; font-weight:600;">Severity</label>
+              <select id="addCriticality" style="width:100%; padding:6px; border:1px solid #bae6fd; border-radius:4px;">
+                <option value="Critical">Critical</option><option value="High">High</option><option value="Medium">Medium</option><option value="Low">Low</option><option value="Unknown" selected>Unknown</option>
+              </select>
+            </div>
+            <div><label style="font-size:11px; font-weight:600;">Kategori</label><input type="text" id="addCategory" style="width:100%; padding:6px; border:1px solid #bae6fd; border-radius:4px;"></div>
+            <div style="grid-column:1 / -1"><label style="font-size:11px; font-weight:600;">Deskripsi (Summary)*</label><textarea id="addSummary" rows="2" style="width:100%; padding:6px; border:1px solid #bae6fd; border-radius:4px;"></textarea></div>
+            <div style="grid-column:1 / -1"><label style="font-size:11px; font-weight:600;">Mitigasi</label><textarea id="addMitigation" rows="2" style="width:100%; padding:6px; border:1px solid #bae6fd; border-radius:4px;"></textarea></div>
+            <div><label style="font-size:11px; font-weight:600;">MITRE Tactic</label><input type="text" id="addMitre" style="width:100%; padding:6px; border:1px solid #bae6fd; border-radius:4px;"></div>
+            <div><label style="font-size:11px; font-weight:600;">Source Log</label><input type="text" id="addSourceLog" style="width:100%; padding:6px; border:1px solid #bae6fd; border-radius:4px;"></div>
+            <div><label style="font-size:11px; font-weight:600;">OS Version</label><input type="text" id="addOsVersion" style="width:100%; padding:6px; border:1px solid #bae6fd; border-radius:4px;"></div>
+          </div>
+          <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
+            <button class="btn btn-secondary btn-sm" onclick="closeAddForm()">Batal</button>
+            <button class="btn btn-primary btn-sm" onclick="submitAddEntry()">Simpan</button>
+          </div>
+        </div>
+
+        <div class="log-table-container" style="max-height:450px;">
+          <table class="log-table">
+            <thead>
+              <tr>
+                <th style="width:80px">Event ID</th>
+                <th style="width:80px">Severity</th>
+                <th style="width:250px">Deskripsi</th>
+                <th style="width:120px">Kategori</th>
+                <th style="width:200px">Mitigasi</th>
+                <th style="width:100px">MITRE Tactic</th>
+                <th style="width:70px">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="kbTableBody">
+              <tr><td colspan="7" style="text-align:center;padding:16px;color:var(--text-muted)">Memuat...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Global Loading Overlay -->
+<div class="loading-overlay hidden" id="globalLoading">
+  <div class="spinner"></div>
+  <h3 id="globalLoadingText" style="margin:0;font-size:16px;font-weight:600">Memproses...</h3>
+  <p id="globalLoadingSubtext" style="font-size:13px;color:rgba(255,255,255,0.7);margin-top:8px"></p>
+</div>
+
+<!-- API Key Modal -->
+<div class="modal-overlay hidden" id="apiKeyModal">
+  <div class="modal">
+    <h3>🔑 Konfigurasi API Key</h3>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Masukkan API Key untuk mengaktifkan analisis AI. Disimpan aman di server Google.</p>
+    <label style="font-size:11px;font-weight:700">Gemini API Key</label>
+    <input type="password" id="inputGemini" placeholder="AIza...">
+    <label style="font-size:11px;font-weight:700">OpenAI API Key (opsional)</label>
+    <input type="password" id="inputOpenai" placeholder="sk-...">
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="hideApiKeyModal()">Batal</button>
+      <button class="btn btn-primary" onclick="saveKeys()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- KB Edit Modal -->
+<div class="modal-overlay hidden" id="kbEditModal">
+  <div class="modal" style="width:600px; max-width:90%;">
+    <h3>✏️ Edit Entri KB</h3>
+    <div id="kbEditError" class="hidden" style="background:#fef2f2; color:#dc2626; padding:10px; border-radius:6px; margin-bottom:12px; font-size:12px;"></div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+      <input type="hidden" id="editEventIdHidden">
+      <div><label style="font-size:11px; font-weight:600;">Event ID</label><input type="text" id="editEventId" disabled style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; background:#f1f5f9;"></div>
+      <div><label style="font-size:11px; font-weight:600;">Legacy Event ID</label><input type="text" id="editLegacyEventId" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px;"></div>
+      <div><label style="font-size:11px; font-weight:600;">Severity</label>
+        <select id="editCriticality" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px;">
+          <option value="Critical">Critical</option><option value="High">High</option><option value="Medium">Medium</option><option value="Low">Low</option><option value="Unknown">Unknown</option>
+        </select>
+      </div>
+      <div><label style="font-size:11px; font-weight:600;">Kategori</label><input type="text" id="editCategory" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px;"></div>
+      <div style="grid-column:1 / -1"><label style="font-size:11px; font-weight:600;">Deskripsi (Summary)</label><textarea id="editSummary" rows="3" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px;"></textarea></div>
+      <div style="grid-column:1 / -1"><label style="font-size:11px; font-weight:600;">Mitigasi</label><textarea id="editMitigation" rows="3" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px;"></textarea></div>
+      <div><label style="font-size:11px; font-weight:600;">MITRE Tactic</label><input type="text" id="editMitre" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px;"></div>
+      <div><label style="font-size:11px; font-weight:600;">Source Log</label><input type="text" id="editSourceLog" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px;"></div>
+      <div><label style="font-size:11px; font-weight:600;">OS Version</label><input type="text" id="editOsVersion" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px;"></div>
+    </div>
+    <div class="modal-actions" style="margin-top:20px;">
+      <button class="btn btn-secondary" onclick="closeEditModal()">Batal</button>
+      <button class="btn btn-primary" onclick="submitEditEntry()">💾 Simpan Perubahan</button>
+    </div>
+  </div>
+</div>
+
+<!-- Email Alert Modal -->
+<div class="modal-overlay hidden" id="emailModal">
+  <div class="modal">
+    <h3>📧 Kirim Email Peringatan Insiden</h3>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Laporan ini akan dikirimkan ke email tim keamanan IT Anda dengan format HTML yang rapi.</p>
+    <label style="font-size:11px;font-weight:700">Alamat Email Penerima</label>
+    <input type="email" id="inputEmail" placeholder="soc-team@perusahaan.com">
+    <label style="font-size:11px;font-weight:700;margin-top:8px;display:block">Tingkat Keparahan (Severity)</label>
+    <select id="inputSeverity" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin:8px 0;font-family:'Inter',sans-serif">
+      <option value="Critical">🚨 Critical (Sangat Darurat)</option>
+      <option value="Error">⚠️ Error (Gangguan Sistem)</option>
+      <option value="Warning">🔔 Warning (Perlu Perhatian)</option>
+    </select>
+    <div id="emailStatus" style="font-size:11px;color:var(--primary);margin-top:4px"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="hideEmailModal()" id="btnCancelEmail">Batal</button>
+      <button class="btn btn-primary" onclick="sendAlert()" id="btnSendEmail" style="background:#dc2626">🚀 Kirim Email</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+   STATE
+   ═══════════════════════════════════════════════════════════ */
+var allLogs = [];
+var activePreset = '30m';
+var filteredLogs = [];
+var selectedLog = null;
+var currentPage = 1;
+var itemsPerPage = 100;
+var scenarios = [];
+var selectedSeverities = ["Critical","Error","Warning","Information"];
+var aiAnalysisText = null;
+var isMultiFile = false;
+var kbLoaded = false;
+var kbEntries = [];
+var showingAllKB = false;
+var summarySort = {col: 'count', dir: 'desc'};
+var kbFiltered = [];
+var globalInstalledApps = [];
+var globalResourceSnapshots = {};
+var tabStateDirty = {
+  explorer: true,
+  analytics: true,
+  info: true,
+  summary: true,
+  directory: true,
+  kb: true
+};
+
+/* ═══════════════════════════════════════════════════════════
+   INIT
+   ═══════════════════════════════════════════════════════════ */
+google.charts.load("current", {packages:["corechart"]});
+
+window.addEventListener("DOMContentLoaded", function() {
+  // Load scenarios
+  google.script.run.withSuccessHandler(function(json) {
+    scenarios = JSON.parse(json);
+    renderScenarios();
+    if (scenarios.length > 0) {
+      loadScenario(0);
+    }
+  }).getScenariosForClient();
+
+  // Check API keys & KB status
+  google.script.run.withSuccessHandler(function(keys) {
+    var badge = document.getElementById("kbBadge");
+    badge.textContent = "📚 KB: " + (keys.kbSize || 0) + " entri" + (keys.gemini ? " | 🤖 Gemini ✓" : "") + (keys.openai ? " | 🧠 OpenAI ✓" : "");
+  }).checkApiKeys();
+});
+
+/* ═══════════════════════════════════════════════════════════
+   TAB SWITCHING
+   ═══════════════════════════════════════════════════════════ */
+function switchTab(name) {
+  document.querySelectorAll(".tab").forEach(function(t){ t.classList.remove("active"); });
+  document.querySelector('[data-tab="'+name+'"]').classList.add("active");
+  var tabs = ["explorer", "info", "directory", "analytics", "summary", "kb", "laporan"];
+  tabs.forEach(function(t) {
+    var el = document.getElementById("tab-" + t);
+    if(el) {
+      if(t === name) {
+        el.classList.remove("hidden");
+        el.style.display = "block"; 
+      } else {
+        el.classList.add("hidden");
+        el.style.display = "none";
+      }
+    }
+  });
+  
+  if (tabStateDirty[name]) {
+    if (name === "explorer") { renderStats(); renderTable(); }
+    if (name === "directory" && typeof renderDirectory === 'function') renderDirectory();
+    if (name === "analytics" && typeof renderCharts === 'function') renderCharts();
+    if (name === "info" && typeof renderInfoTab === 'function') renderInfoTab();
+    if (name === "summary" && typeof renderSummaryTab === 'function') renderSummaryTab();
+    if (name === "kb" && typeof renderKBTab === 'function') renderKBTab();
+    tabStateDirty[name] = false;
+  }
+}
+
+function generateLaporanCerdas() {
+  if (filteredLogs.length === 0) {
+    alert("Silakan unggah dan filter log terlebih dahulu.");
+    return;
+  }
+  var stat = document.getElementById("laporanStatus");
+  var resDiv = document.getElementById("laporanResult");
+  
+  // Tampilkan loading screen
+  var loadingEl = document.getElementById("globalLoading");
+  if (loadingEl) {
+    document.getElementById("globalLoadingText").textContent = "Menganalisis Laporan Kendala";
+    document.getElementById("globalLoadingSubtext").textContent = "Memproses " + filteredLogs.length + " baris log...";
+    loadingEl.classList.remove("hidden");
+  }
+  
+  stat.textContent = "⏳ Memproses dengan Heuristic Engine...";
+  resDiv.innerHTML = '<div style="text-align:center; padding:40px;">⏳ Sedang menganalisis...</div>';
+  
+  var logsStr = JSON.stringify(filteredLogs);
+  
+  // Compute category counts
+  var categoryCounts = {};
+  filteredLogs.forEach(function(l) {
+    var c = l.category || 'General TextLog';
+    categoryCounts[c] = (categoryCounts[c] || 0) + 1;
+  });
+  var countsStr = JSON.stringify(categoryCounts);
+  
+  var appsStr = typeof globalInstalledApps !== 'undefined' ? JSON.stringify(globalInstalledApps) : "[]";
+  var resStr = typeof globalResourceSnapshots !== 'undefined' ? JSON.stringify(globalResourceSnapshots) : "{}";
+  var timeFrameText = "Rentang filter saat ini";
+  
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (loadingEl) loadingEl.classList.add("hidden");
+      if (typeof res === 'string') {
+        try { res = JSON.parse(res); } catch(e) {}
+      }
+      if(res.success) {
+        stat.textContent = "✅ Laporan berhasil dibuat.";
+        resDiv.innerHTML = renderMarkdown(res.report);
+      } else {
+        stat.textContent = "❌ Gagal: " + res.error;
+        resDiv.innerHTML = '<div style="color:red">Error: ' + res.error + '</div>';
+      }
+    })
+    .withFailureHandler(function(err) {
+      if (loadingEl) loadingEl.classList.add("hidden");
+      stat.textContent = "❌ Error koneksi";
+      resDiv.innerHTML = '<div style="color:red">Error: ' + err.message + '</div>';
+    })
+    .generateLaporanKendala(logsStr, countsStr, timeFrameText, isMultiFile, appsStr, resStr);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SCENARIOS
+   ═══════════════════════════════════════════════════════════ */
+function renderScenarios() {
+  var bar = document.getElementById("scenarioBar");
+  bar.innerHTML = "";
+  scenarios.forEach(function(s, i) {
+    var btn = document.createElement("div");
+    btn.className = "scenario-btn" + (i===0?" active":"");
+    btn.textContent = s.badge + " " + s.name;
+    btn.onclick = function(){ loadScenario(i); };
+    bar.appendChild(btn);
+  });
+}
+
+function loadScenario(idx) {
+  document.querySelectorAll(".scenario-btn").forEach(function(b,i){ b.classList.toggle("active",i===idx); });
+  allLogs = scenarios[idx].logs;
+  isMultiFile = false;
+  applyFilters();
+  document.getElementById("uploadStatus").textContent = "Demo: " + scenarios[idx].name;
+  aiAnalysisText = null;
+  document.getElementById("aiResult").classList.add("hidden");
+  document.getElementById("btnCopy").classList.add("hidden");
+  document.getElementById("btnDownload").classList.add("hidden");
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FILE PARSING (Client-Side)
+   ═══════════════════════════════════════════════════════════ */
+function handleDragOver(e){ e.preventDefault(); document.getElementById("uploadZone").classList.add("drag-over"); }
+function handleDragLeave(e){ document.getElementById("uploadZone").classList.remove("drag-over"); }
+function handleDrop(e){
+  e.preventDefault();
+  document.getElementById("uploadZone").classList.remove("drag-over");
+  if(e.dataTransfer.files.length>0) processFiles(e.dataTransfer.files);
+}
+function handleFileSelect(e){ if(e.target.files.length>0) processFiles(e.target.files); }
+
+function processFiles(fileList) {
+  var files = Array.from(fileList).filter(function(f){ return !f.name.startsWith(".") && f.size > 0; });
+  if (files.length === 0) return;
+  isMultiFile = files.length > 1;
+  var fastScan = document.getElementById("chkFastScan").checked;
+  var loaded = [];
+  var processed = 0;
+  var fileStats = [];
+  var statusEl = document.getElementById("uploadStatus");
+  var progContainer = document.getElementById("progressContainer");
+  var progFill = document.getElementById("progressFill");
+  progContainer.classList.remove("hidden");
+  statusEl.textContent = "Sedang membaca file di latar belakang...";
+
+  // Create Web Worker for background processing
+  var workerCode = "\n" +
+    "self.onmessage = function(e) {\n" +
+    "  var text = e.data.text;\n" +
+    "  var name = e.data.name;\n" +
+    "  var fastScan = e.data.fastScan;\n" +
+    "  var parsed = [];\n" +
+    "  var metaData = null;\n" +
+    "  if (name.endsWith('.json')) {\n" +
+    "    try {\n" +
+    "      var j = JSON.parse(text);\n" +
+    "      if(j.SystemLogs) {\n" +
+    "        parsed = j.SystemLogs.map(function(l, i) {\n" +
+    "          return { id: 'json-'+i+'-'+Date.now(), timestamp: l.time, level: (l.level==='Warning'?'Warning':l.level==='Error'?'Error':l.level==='Critical'?'Critical':'Information'), source: l.source||'Unknown', eventId: l.id||0, channel: 'System', computer: j.SystemInfo?j.SystemInfo.Hostname:(j.DeviceMetadata?j.DeviceMetadata.HostName:'localhost'), message: l.msg||'', category: computeCategoryClient(l.source||'Unknown', l.id||0, l.msg||'') };\n" +
+    "        });\n" +
+    "      }\n" +
+    "      metaData = { sys: j.DeviceMetadata || j.SystemInfo, res: j.ResourceSnapshots, apps: j.InstalledApplications };\n" +
+    "    } catch(err) {}\n" +
+    "  }\n" +
+    "  else if (name.endsWith('.xml')) parsed = parseXml(text, fastScan);\n" +
+    "  else if (name.endsWith('.csv')) parsed = parseCsv(text, fastScan);\n" +
+    "  else parsed = parseText(text, fastScan);\n" +
+    "  parsed.forEach(function(l){ l.computerName = name; });\n" +
+    "  self.postMessage({ logs: parsed, fileName: name, meta: metaData });\n" +
+    "};\n" +
+    parseXml.toString() + "\n" +
+    parseCsv.toString() + "\n" +
+    parseCsvRow.toString() + "\n" +
+    parseText.toString() + "\n" +
+    computeCategoryClient.toString() + "\n";
+    
+  var blob = new Blob([workerCode], {type: 'application/javascript'});
+  var workerUrl = URL.createObjectURL(blob);
+
+  files.forEach(function(file) {
+    var reader = new FileReader();
+    reader.onload = function(evt) {
+      var text = evt.target.result;
+      var worker = new Worker(workerUrl);
+      
+      worker.onmessage = function(e) {
+        loaded = loaded.concat(e.data.logs);
+        processed++;
+        fileStats.push({ name: e.data.fileName, count: e.data.logs.length });
+        
+        if (e.data.meta && e.data.meta.sys) {
+          globalInstalledApps = e.data.meta.apps || [];
+          globalResourceSnapshots = e.data.meta.res || {};
+          var sys = e.data.meta.sys;
+          var res = e.data.meta.res || {};
+          document.getElementById('deviceMetadataWidget').style.display = 'block';
+          document.getElementById('metaHost').textContent = sys.Hostname || '-';
+          document.getElementById('metaOS').textContent = sys.OS || '-';
+          document.getElementById('metaRAM').textContent = (sys.TotalRAM_GB || '-') + ' GB';
+          document.getElementById('metaDisk').textContent = (sys.FreeDiskSpaceC_GB || '-') + ' GB';
+          document.getElementById('metaCpuLoad').textContent = (res.CurrentCpuLoadPct || '-') + '%';
+          document.getElementById('metaRamLoad').textContent = (res.CurrentRamLoadPct || '-') + '%';
+          document.getElementById('metaArch').textContent = sys.Architecture || '-';
+          var hBadge = document.getElementById('metaInitialHealth');
+          if (res.PerformanceAlerts && res.PerformanceAlerts.length > 0) {
+             hBadge.style.background = '#ef4444'; hBadge.textContent = 'Warning';
+          } else {
+             hBadge.style.background = '#22c55e'; hBadge.textContent = 'Good';
+          }
+        }
+        
+        progFill.style.width = Math.round((processed/files.length)*100) + "%";
+        worker.terminate();
+        
+        if (processed === files.length) {
+          loaded.sort(function(a,b){ return new Date(b.timestamp)-new Date(a.timestamp); });
+          allLogs = loaded;
+          // Auto-population dates
+          if (allLogs.length > 0) {
+            var maxDateMs = allLogs[0].timestamp;
+            var minDateMs = allLogs[allLogs.length-1].timestamp;
+            document.getElementById("dateStart").value = new Date(minDateMs).toISOString().split("T")[0];
+            document.getElementById("dateEnd").value = new Date(maxDateMs).toISOString().split("T")[0];
+            activePreset = null;
+            document.querySelectorAll(".preset-btn").forEach(function(b) { b.classList.remove("active"); });
+          }
+          applyFilters();
+          
+          var msgHtml = "<div style='font-size:12px; line-height:1.6; margin-top:8px; background:var(--card); padding:12px; border-radius:8px; border:1px solid var(--border);'>";
+          var totalCount = 0;
+          fileStats.forEach(function(fs) {
+            if(fs.count > 0) {
+              msgHtml += "<div style='color:#10b981; font-weight:600;'>✅ <b>" + fs.name + "</b> (" + fs.count + " entri log berhasil diurai)</div>";
+              totalCount += fs.count;
+            } else {
+              msgHtml += "<div style='color:#ef4444; font-weight:600;'>❌ <b>" + fs.name + "</b> (Gagal diurai / Kosong. Pastikan file berformat ekspor Event Viewer CSV/XML yang presisi)</div>";
+            }
+          });
+          if(totalCount === 0) {
+            msgHtml += "<div style='color:#ef4444; font-weight:bold; margin-top:6px; font-size:13px;'>⚠️ Semua file gagal diurai. Mohon periksa kembali struktur file log Anda.</div>";
+          } else {
+            msgHtml += "<div style='margin-top:6px; font-weight:bold; color:var(--text); font-size:13px;'>Total: " + totalCount + " entri dari " + files.length + " file.</div>";
+          }
+          msgHtml += "</div>";
+          
+          statusEl.innerHTML = msgHtml;
+          setTimeout(function(){ progContainer.classList.add("hidden"); }, 800);
+          aiAnalysisText = null;
+          document.getElementById("aiResult").classList.add("hidden");
+          URL.revokeObjectURL(workerUrl); // Cleanup
+        }
+      };
+      
+      // Send data to worker
+      worker.postMessage({
+        text: text,
+        name: file.name.toLowerCase(),
+        fastScan: fastScan
+      });
+    };
+    reader.readAsText(file);
+  });
+}
+
+/* ── XML Parser ── */
+function parseXml(text, fastScan) {
+  var logs = [];
+  var parser = new DOMParser();
+  var start = 0, i = 0;
+  while(true) {
+    start = text.indexOf("<Event", start);
+    if(start===-1) break;
+    var end = text.indexOf("</Event>", start);
+    if(end===-1) break;
+    var chunk = text.slice(start, end+8);
+    start = end+8;
+    try {
+      var doc = parser.parseFromString(chunk,"text/xml");
+      var ev = doc.documentElement;
+      if(!ev) continue;
+      var elems = ev.getElementsByTagName("*");
+      var getE = function(n){ for(var j=0;j<elems.length;j++) if(elems[j].localName===n) return elems[j]; return null; };
+      var sys = getE("System"); if(!sys) continue;
+      var eidN = getE("EventID"); var eid = eidN ? parseInt(eidN.textContent||"0",10) : 0;
+      var provN = getE("Provider"); var src = provN ? provN.getAttribute("Name")||"Unknown" : "Unknown";
+      var tcN = getE("TimeCreated"); var ts = tcN ? tcN.getAttribute("SystemTime")||new Date().toISOString() : new Date().toISOString();
+      var lvlN = getE("Level"); var rl = lvlN ? lvlN.textContent : "4";
+      var level = rl==="1"?"Critical":rl==="2"?"Error":rl==="3"?"Warning":"Information";
+      if(fastScan && level==="Information") continue;
+      var chN = getE("Channel"); var rawCh = chN ? (chN.textContent||"").toLowerCase() : "";
+      var ch = rawCh.indexOf("system")!==-1?"System":rawCh.indexOf("application")!==-1?"Application":rawCh.indexOf("security")!==-1?"Security":"Unknown";
+      var compN = getE("Computer"); var comp = compN ? compN.textContent||"localhost" : "localhost";
+      var edN = getE("EventData"); var msg = "";
+      if(edN){var dns=edN.getElementsByTagName("Data");var p=[];for(var j=0;j<dns.length;j++){var nm=dns[j].getAttribute("Name");var v=dns[j].textContent;if(nm)p.push(nm+": "+v);else if(v)p.push(v);}msg=p.join("\n")||"No data.";}
+      else msg=ev.textContent?ev.textContent.trim().substring(0,500):"No message.";
+      var cat = computeCategoryClient(src, eid, msg);
+      logs.push({id:"xml-"+i+"-"+Date.now(),timestamp:ts,level:level,source:src,eventId:eid,channel:ch,computer:comp,message:msg,category:cat});
+      i++;
+    } catch(e){}
+  }
+  return logs;
+}
+
+/* ── CSV Parser ── */
+function parseCsv(text, fastScan) {
+  var logs = [];
+  var rows = [], pos = 0, q = false;
+  // Memisahkan baris dengan menghiraukan newline di dalam tanda kutip (multiline)
+  for(var i=0; i<text.length; i++) {
+    if(text[i] === '"') q = !q;
+    else if(text[i] === '\n' && !q) {
+      rows.push(text.substring(pos, i).replace(/\r$/, ""));
+      pos = i + 1;
+    }
+  }
+  if (pos < text.length) rows.push(text.substring(pos).replace(/\r$/, ""));
+
+  if(rows.length < 2) return [];
+  var headers = parseCsvRow(rows[0]).map(function(h){return h.toLowerCase().trim();});
+  var li=headers.indexOf("level"),ti=headers.indexOf("date and time")!==-1?headers.indexOf("date and time"):headers.findIndex(function(h){return h.indexOf("date")!==-1||h.indexOf("time")!==-1;}),
+      si=headers.indexOf("source")!==-1?headers.indexOf("source"):headers.indexOf("provider"),
+      ii=headers.indexOf("event id")!==-1?headers.indexOf("event id"):headers.findIndex(function(h){return h.indexOf("id")!==-1;}),
+      mi=headers.indexOf("description")!==-1?headers.indexOf("description"):headers.length-1;
+
+  for (var r=1; r<rows.length; r++) {
+    var line = rows[r];
+    if(!line.trim()) continue;
+    var cols = parseCsvRow(line);
+    if(cols.length < 2) continue;
+    
+    var rawLvl=li!==-1?cols[li]||"":"Information";
+    var level=/critical/i.test(rawLvl)?"Critical":/error/i.test(rawLvl)?"Error":/warning/i.test(rawLvl)?"Warning":"Information";
+    if(fastScan&&level==="Information")continue;
+    
+    var ts=new Date().toISOString();
+    if(ti!==-1&&cols[ti]){try{var d=new Date(cols[ti]);if(!isNaN(d.getTime()))ts=d.toISOString();}catch(e){}}
+    var src=si!==-1&&cols[si]?cols[si]:"System Source";
+    var eid=ii!==-1&&cols[ii]?parseInt(cols[ii],10)||0:0;
+    var msg=mi!==-1&&cols[mi]?cols[mi]:"No details.";
+    
+    var ch="System";if(/security/i.test(src))ch="Security";else if(/application/i.test(src))ch="Application";
+    var cat=computeCategoryClient(src,eid,msg);
+    logs.push({id:"csv-"+r+"-"+Date.now(),timestamp:ts,level:level,source:src,eventId:eid,channel:ch,computer:"localhost",message:msg,category:cat});
+  }
+  return logs;
+}
+
+function parseCsvRow(row) {
+  var r=[], c="", q=false;
+  for(var i=0; i<row.length; i++){
+    var ch=row[i];
+    if(ch==='"') {
+      if(q && i+1<row.length && row[i+1]==='"') { c+='"'; i++; } // Escaped quote
+      else { q=!q; }
+    } else if(ch==="," && !q) {
+      r.push(c); c="";
+    } else {
+      c+=ch;
+    }
+  }
+  r.push(c);
+  return r;
+}
+
+/* ── Text Parser ── */
+function parseText(text, fastScan) {
+  var logs=[];var regex=/(\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}[^\\n]*)/g;var parts=text.split(regex);
+  var cur=null,cnt=0;
+  for(var i=0;i<parts.length;i++){
+    var p=parts[i].trim();if(!p)continue;
+    var isDate=/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}/.test(p);
+    if(isDate){
+      if(cur&&cur.timestamp&&cur.message){if(!(fastScan&&cur.level==="Information"))logs.push(cur);}
+      var level="Information";if(/error/i.test(p))level="Error";else if(/warning/i.test(p))level="Warning";else if(/critical/i.test(p))level="Critical";
+      var idM=p.match(/(?:eventId|event id|id|ID)[:\s]+(\d+)/i);var eid=idM?parseInt(idM[1],10):0;
+      var srcM=p.match(/(?:source|provider)[:\s]+([^\s,]+)/i);var src=srcM?srcM[1]:"System TextLog";
+      cur={id:"text-"+(cnt++)+"-"+Date.now(),timestamp:new Date(p.substring(0,24)).toISOString()||new Date().toISOString(),level:level,source:src,eventId:eid,channel:"System",computer:"localhost",message:p,category:"General TextLog"};
+    } else if(cur){cur.message+="\n"+p;cur.category=computeCategoryClient(cur.source,cur.eventId,cur.message);}
+  }
+  if(cur&&cur.timestamp){if(!(fastScan&&cur.level==="Information"))logs.push(cur);}
+  return logs;
+}
+
+/* ── Client-side computeCategory ── */
+function computeCategoryClient(source,eventId,message){
+  var s=(source||"").toLowerCase(),m=(message||"").toLowerCase();
+  if(s.indexOf("codeintegrity")!==-1||[3001,3002,3003,3004,3091,3097].indexOf(eventId)!==-1)return"Code Integrity (WDAC)";
+  if(s.indexOf("defender")!==-1||[1116,1117,1118,1119,5001,5007,5008,5009].indexOf(eventId)!==-1)return"Defender Security";
+  if(s.indexOf("tcpip")!==-1||s.indexOf("dns")!==-1||s.indexOf("firewall")!==-1||m.indexOf("network")!==-1)return"Network & Firewalls";
+  if(s.indexOf("disk")!==-1||s.indexOf("ntfs")!==-1||eventId===7||eventId===55||eventId===51)return"Hardware & Disk";
+  if(s.indexOf("service control")!==-1||[7000,7001,7031,7034].indexOf(eventId)!==-1)return"Service Failures";
+  if(s.indexOf("application error")!==-1||eventId===1000||eventId===1026)return"Application Crash";
+  if(s.indexOf("security-auditing")!==-1||[4624,4625].indexOf(eventId)!==-1)return"Auditing & Access";
+  if(s.indexOf("windowsupdateclient")!==-1||[19,20].indexOf(eventId)!==-1)return"System Updates";
+  return"General System";
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FILTERING & RENDERING
+   ═══════════════════════════════════════════════════════════ */
+function applyPreset(type) {
+  activePreset = type;
+  document.querySelectorAll(".preset-btn").forEach(function(b) { b.classList.remove("active"); });
+  var btn = document.getElementById("preset" + type);
+  if (btn) btn.classList.add("active");
+  document.getElementById("dateRangeError").classList.add("hidden");
+
+  if (allLogs.length === 0) return;
+
+  var latest = allLogs.reduce(function(a,b){return new Date(a.timestamp)>new Date(b.timestamp)?a:b;});
+  var latestMs = new Date(latest.timestamp).getTime();
+  
+  var msSub = 0;
+  if (type === '30m') msSub = 30*60*1000;
+  else if (type === '1h') msSub = 60*60*1000;
+  else if (type === '3h') msSub = 3*60*60*1000;
+
+  var dStart = document.getElementById("dateStart");
+  var dEnd = document.getElementById("dateEnd");
+
+  if (type === 'all') {
+    dStart.value = "";
+    dEnd.value = "";
+  } else {
+    var startDate = new Date(latestMs - msSub);
+    var endDate = new Date(latestMs);
+    dStart.value = startDate.toISOString().split("T")[0];
+    dEnd.value = endDate.toISOString().split("T")[0];
+  }
+  
+  applyFilters();
+}
+
+function handleDateInput() {
+  activePreset = null;
+  document.querySelectorAll(".preset-btn").forEach(function(b) { b.classList.remove("active"); });
+  document.getElementById("dateRangeError").classList.add("hidden");
+  applyFilters();
+}
+
+function applyFilters() {
+  var search = document.getElementById("searchInput").value.toLowerCase();
+  var channel = document.getElementById("channelFilter").value;
+  var dStart = document.getElementById("dateStart").value;
+  var dEnd = document.getElementById("dateEnd").value;
+  var dateRangeError = document.getElementById("dateRangeError");
+
+  var startTime = null;
+  var endTime = null;
+
+  if (dStart && dEnd) {
+    if (dStart > dEnd) {
+      dateRangeError.classList.remove("hidden");
+      return; // Stop applying filter if invalid
+    }
+  }
+  
+  if (dStart) {
+    startTime = new Date(dStart + "T00:00:00").getTime();
+  }
+  if (dEnd) {
+    endTime = new Date(dEnd + "T23:59:59").getTime();
+  }
+
+  // If there's an active preset, override start/end based on exact milliseconds from latest log
+  if (activePreset && activePreset !== 'all' && allLogs.length > 0) {
+    var latest = allLogs.reduce(function(a,b){return new Date(a.timestamp)>new Date(b.timestamp)?a:b;});
+    var latestMs = new Date(latest.timestamp).getTime();
+    var msSub = 30*60*1000;
+    if (activePreset === '1h') msSub = 60*60*1000;
+    if (activePreset === '3h') msSub = 3*60*60*1000;
+    startTime = latestMs - msSub;
+    endTime = latestMs;
+  }
+
+  filteredLogs = allLogs.filter(function(log) {
+    if (selectedSeverities.indexOf(log.level) === -1) return false;
+    if (search && log.source.toLowerCase().indexOf(search)===-1 && log.message.toLowerCase().indexOf(search)===-1 && String(log.eventId).indexOf(search)===-1) return false;
+    if (channel !== "All" && log.channel !== channel) return false;
+    
+    var t = new Date(log.timestamp).getTime();
+    if (startTime && t < startTime) return false;
+    if (endTime && t > endTime) return false;
+    return true;
+  });
+
+  currentPage = 1;
+  updateTimeframeLabel();
+  
+  // Render only the active tab for better performance (lazy rendering)
+  var activeTab = document.querySelector(".tab.active");
+  if (activeTab) {
+    var name = activeTab.getAttribute("data-tab");
+    if (name === "explorer") { renderStats(); renderTable(); }
+    else if (name === "info" && typeof renderInfoTab === 'function') renderInfoTab();
+    else if (name === "summary" && typeof renderSummaryTab === 'function') renderSummaryTab();
+    else if (name === "analytics" && typeof renderCharts === 'function') renderCharts();
+    else if (name === "directory" && typeof renderDirectory === 'function') renderDirectory();
+    else if (name === "kb" && typeof renderKBTab === 'function') renderKBTab();
+  }
+}
+
+function toggleSev(el) {
+  var sev = el.getAttribute("data-sev");
+  var idx = selectedSeverities.indexOf(sev);
+  if (idx === -1) { selectedSeverities.push(sev); el.classList.remove("off"); el.classList.add("on"); }
+  else { selectedSeverities.splice(idx, 1); el.classList.remove("on"); el.classList.add("off"); }
+  applyFilters();
+}
+
+function renderStats() {
+  var s = {Critical:0,Error:0,Warning:0,Information:0};
+  filteredLogs.forEach(function(l){ if(s[l.level]!==undefined) s[l.level]++; });
+  document.getElementById("statCrit").textContent = s.Critical;
+  document.getElementById("statErr").textContent = s.Error;
+  document.getElementById("statWarn").textContent = s.Warning;
+  document.getElementById("statInfo").textContent = s.Information;
+  document.getElementById("logCount").textContent = filteredLogs.length;
+}
+
+function renderTable() {
+  var tbody = document.getElementById("logTableBody");
+  var start = (currentPage - 1) * itemsPerPage;
+  var page = filteredLogs.slice(start, start + itemsPerPage);
+  var html = "";
+  page.forEach(function(log) {
+    var badgeClass = log.level==="Critical"?"badge-critical":log.level==="Error"?"badge-error":log.level==="Warning"?"badge-warning":"badge-info";
+    var emoji = log.level==="Critical"?"🚨":log.level==="Error"?"⚠️":log.level==="Warning"?"🔔":"ℹ️";
+    var sel = selectedLog && selectedLog.id === log.id ? " selected" : "";
+    html += '<tr class="'+sel+'" onclick="selectLog(\''+log.id+'\')">' +
+      '<td><span class="badge '+badgeClass+'">'+emoji+" "+log.level.substring(0,4)+'</span></td>' +
+      '<td style="font-family:monospace;font-size:10px;color:var(--text-muted);white-space:nowrap">'+new Date(log.timestamp).toLocaleTimeString()+'</td>' +
+      '<td><span class="badge badge-eventid">'+log.eventId+'</span></td>' +
+      '<td style="max-width:150px"><div style="font-weight:700;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+log.source+'</div><div style="font-size:9px;color:var(--text-muted)">'+log.channel+' log</div></td>' +
+      '</tr>';
+  });
+  tbody.innerHTML = html || '<tr><td colspan="4" style="padding:32px;text-align:center;color:var(--text-muted)">Tidak ada kejadian terdeteksi</td></tr>';
+
+  // Pagination
+  var total = filteredLogs.length;
+  var maxPage = Math.max(1, Math.ceil(total / itemsPerPage));
+  document.getElementById("pageRange").textContent = total > 0 ? (start+1) + "-" + Math.min(start+itemsPerPage, total) : "0-0";
+  document.getElementById("pageTotal").textContent = total;
+  document.getElementById("pageNum").textContent = "Hal " + currentPage;
+  document.getElementById("btnPrev").disabled = currentPage <= 1;
+  document.getElementById("btnNext").disabled = currentPage >= maxPage;
+}
+
+function prevPage(){ currentPage = Math.max(1, currentPage-1); renderTable(); }
+function nextPage(){ currentPage = Math.min(Math.ceil(filteredLogs.length/itemsPerPage), currentPage+1); renderTable(); }
+
+function selectLog(id) {
+  selectedLog = allLogs.find(function(l){return l.id===id;}) || filteredLogs.find(function(l){return l.id===id;});
+  renderTable();
+  renderDetail();
+}
+
+function renderDetail() {
+  var panel = document.getElementById("detailPanel");
+  if (!selectedLog) { panel.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted)"><p style="font-size:24px">📄</p><p>Klik salah satu log</p></div>'; return; }
+  var l = selectedLog;
+  var badgeClass = l.level==="Critical"?"badge-critical":l.level==="Error"?"badge-error":l.level==="Warning"?"badge-warning":"badge-info";
+  panel.innerHTML =
+    '<div class="detail-row"><span class="detail-label">Tingkat</span><span class="detail-value"><span class="badge '+badgeClass+'">'+l.level+'</span></span></div>' +
+    '<div class="detail-row"><span class="detail-label">Waktu</span><span class="detail-value">'+new Date(l.timestamp).toLocaleString()+'</span></div>' +
+    '<div class="detail-row"><span class="detail-label">Event ID</span><span class="detail-value"><span class="badge badge-eventid">'+l.eventId+'</span></span></div>' +
+    '<div class="detail-row"><span class="detail-label">Sumber</span><span class="detail-value" style="font-weight:600">'+l.source+'</span></div>' +
+    '<div class="detail-row"><span class="detail-label">Channel</span><span class="detail-value">'+l.channel+'</span></div>' +
+    '<div class="detail-row"><span class="detail-label">Komputer</span><span class="detail-value">'+l.computer+'</span></div>' +
+    '<div class="detail-row"><span class="detail-label">Kategori</span><span class="detail-value">'+l.category+'</span></div>' +
+    '<div style="padding:12px 16px"><span class="detail-label" style="display:block;margin-bottom:6px">Pesan</span><div class="detail-message" style="margin-bottom:12px;">'+escapeHtml(l.message)+'</div>' +
+    '<button class="btn btn-primary btn-sm" style="width:100%; justify-content:center;" onclick="switchTab(\'info\')">🔍 Bawa ke Info Error (Deep Analysis)</button></div>';
+}
+
+function escapeHtml(t){return (t||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+
+function updateTimeframeLabel(){
+  var lbl = document.getElementById("timeframeLabel");
+  if (!lbl) return;
+  if (activePreset) {
+    if (activePreset === '30m') lbl.textContent = "Timeframe: 30 Menit Terakhir";
+    else if (activePreset === '1h') lbl.textContent = "Timeframe: 1 Jam Terakhir";
+    else if (activePreset === '3h') lbl.textContent = "Timeframe: 3 Jam Terakhir";
+    else if (activePreset === 'all') lbl.textContent = "Timeframe: Semua Waktu";
+  } else {
+    var dStart = document.getElementById("dateStart").value;
+    var dEnd = document.getElementById("dateEnd").value;
+    if (dStart && dEnd) {
+      lbl.textContent = "Timeframe: " + dStart + " \u2013 " + dEnd;
+    } else if (dStart) {
+      lbl.textContent = "Timeframe: Mulai " + dStart;
+    } else if (dEnd) {
+      lbl.textContent = "Timeframe: Sampai " + dEnd;
+    } else {
+      lbl.textContent = "Timeframe: Semua Waktu";
+    }
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   AI ANALYSIS
+   ═══════════════════════════════════════════════════════════ */
+function runAiAnalysis() {
+  var btn = document.getElementById("btnAnalyze");
+  btn.disabled = true; btn.textContent = "⏳ Menganalisis...";
+  var progDiv = document.getElementById("analysisProgress");
+  var progFill = document.getElementById("analysisFill");
+  progDiv.classList.remove("hidden");
+  var progress = 0;
+  var interval = setInterval(function(){
+    progress = Math.min(98, progress + (progress<40?4:progress<70?2:1));
+    progFill.style.width = progress+"%";
+  }, 400);
+
+  // Smart Context Logs: Pick errors and their immediate preceding Information logs
+  var logsToSend = [];
+  var addedIds = {};
+  for (var i = 0; i < filteredLogs.length && logsToSend.length < 45; i++) {
+    var l = filteredLogs[i];
+    if (["Critical", "Error", "Warning"].indexOf(l.level) !== -1) {
+      if (!addedIds[l.id]) {
+        logsToSend.push(l);
+        addedIds[l.id] = true;
+      }
+      // Grab 1 immediate preceding log from allLogs to provide trigger context
+      var allIdx = allLogs.findIndex(function(al){ return al.id === l.id; });
+      if (allIdx !== -1 && allIdx + 1 < allLogs.length) {
+        var prevLog = allLogs[allIdx + 1];
+        if (prevLog.level === "Information" && !addedIds[prevLog.id] && logsToSend.length < 45) {
+          logsToSend.push(prevLog);
+          addedIds[prevLog.id] = true;
+        }
+      }
+    }
+  }
+  if (logsToSend.length === 0) logsToSend = filteredLogs.slice(0, 30);
+  
+  // Sort back by time descending for AI
+  logsToSend.sort(function(a,b){ return new Date(b.timestamp)-new Date(a.timestamp); });
+  var catStats = {};
+  filteredLogs.forEach(function(l){catStats[l.category]=(catStats[l.category]||0)+1;});
+  var tf = "Semua Waktu";
+  if(activePreset==="30m") tf = "30 Menit Terakhir";
+  else if(activePreset==="1h") tf = "1 Jam Terakhir";
+  else if(activePreset==="3h") tf = "3 Jam Terakhir";
+  else if(!activePreset) {
+    var dS = document.getElementById("dateStart").value;
+    var dE = document.getElementById("dateEnd").value;
+    if(dS&&dE) tf = dS + " to " + dE;
+  }
+  
+  var enableAi = document.getElementById("chkEnableAi").checked;
+
+  google.script.run
+    .withSuccessHandler(function(resultJson) {
+      clearInterval(interval);
+      progFill.style.width = "100%";
+      var data = JSON.parse(resultJson);
+      if (data.error) {
+        document.getElementById("aiResult").textContent = "❌ " + data.error;
+        document.getElementById("aiResult").classList.remove("hidden");
+      } else {
+        aiAnalysisText = data.analysis;
+        
+        // Extract PowerShell Remediation Script
+        var psMatch = aiAnalysisText.match(/```powershell([\s\S]*?)```/i);
+        if (psMatch && psMatch[1]) {
+          var code = psMatch[1].trim();
+          document.getElementById("remediationCode").textContent = code;
+          document.getElementById("remediationScriptBox").classList.remove("hidden");
+          // Remove the code block from the markdown to avoid duplication if desired, but keeping it is fine too.
+        } else {
+          document.getElementById("remediationScriptBox").classList.add("hidden");
+        }
+        
+        document.getElementById("aiResult").innerHTML = renderMarkdown(data.analysis);
+        document.getElementById("aiResult").classList.remove("hidden");
+        document.getElementById("btnCopy").classList.remove("hidden");
+        document.getElementById("btnDownload").classList.remove("hidden");
+        document.getElementById("btnDocs").classList.remove("hidden");
+        document.getElementById("btnAlert").classList.remove("hidden");
+      }
+      setTimeout(function(){ progDiv.classList.add("hidden"); btn.disabled=false; btn.textContent="✨ Jalankan Analisis"; }, 700);
+    })
+    .withFailureHandler(function(err) {
+      clearInterval(interval);
+      progDiv.classList.add("hidden");
+      document.getElementById("aiResult").textContent = "❌ Gagal: " + err.message;
+      document.getElementById("aiResult").classList.remove("hidden");
+      btn.disabled=false; btn.textContent="✨ Jalankan Analisis";
+    })
+    .analyzeLogs(JSON.stringify(logsToSend), JSON.stringify(catStats), tf, isMultiFile, enableAi);
+
+  // Trigger MITRE & Health analysis in backend
+  google.script.run.withSuccessHandler(function(resJson) {
+    var res = JSON.parse(resJson);
+    if(res.error) return;
+    document.getElementById("healthAndMitrePanel").classList.remove("hidden");
+    var hBar = document.getElementById("healthScoreBar");
+    var hVal = document.getElementById("healthScoreVal");
+    hVal.textContent = res.healthScore + "%";
+    hBar.style.width = res.healthScore + "%";
+    hBar.style.background = res.healthScore > 80 ? "#10b981" : res.healthScore > 40 ? "#f59e0b" : "#ef4444";
+    
+    var mCards = document.getElementById("mitreCards");
+    mCards.innerHTML = "";
+    if (res.tactics.length === 0) {
+      mCards.innerHTML = "<div style='font-size:12px;color:var(--text-muted)'>✅ Tidak terdeteksi indikator serangan spesifik.</div>";
+    } else {
+      res.tactics.forEach(function(t) {
+        var color = t.severity === "CRITICAL" ? "#dc2626" : t.severity === "HIGH" ? "#ea580c" : "#ca8a04";
+        mCards.innerHTML += "<div style='background:rgba(255,255,255,0.05);border-left:3px solid "+color+";padding:8px;border-radius:4px'><div style='font-size:11px;font-weight:700;color:"+color+"'>"+t.id+" - "+t.name+"</div><div style='font-size:10px;color:var(--text-muted);margin-top:2px'>"+t.desc+"</div></div>";
+      });
+    }
+  }).analyzeThreatsAndHealth(JSON.stringify(logsToSend));
+  
+  // Trigger History check if we have logs
+  if (logsToSend.length > 0 && logsToSend[0].computer) {
+    google.script.run.withSuccessHandler(function(res) {
+      if (res && res.count > 1) {
+        var badge = document.getElementById("historyBadge");
+        badge.classList.remove("hidden");
+        badge.setAttribute("data-msg", res.message);
+      }
+    }).getServerHistory(logsToSend[0].computer);
+  }
+}
+
+function copyRemediationScript() {
+  var code = document.getElementById("remediationCode").textContent;
+  if(code) {
+    navigator.clipboard.writeText(code);
+    var btn = document.getElementById("btnCopyScript");
+    btn.textContent = "✅ Tersalin";
+    setTimeout(function(){ btn.textContent = "Salin Skrip"; }, 2000);
+  }
+}
+
+function renderMarkdown(md) {
+  // Simple markdown renderer
+  return (md||"")
+    .replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/^- (.+)$/gm, '• $1<br>')
+    .replace(/^\d+\. (.+)$/gm, '<strong>$1</strong><br>')
+    .replace(/\n/g, '<br>');
+}
+
+function copyAiReport(){ if(aiAnalysisText) navigator.clipboard.writeText(aiAnalysisText); }
+function downloadAiReport(){
+  if(!aiAnalysisText) return;
+  var blob = new Blob([aiAnalysisText],{type:"text/plain;charset=utf-8"});
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "Event_Analysis_Report_"+Date.now()+".md";
+  a.click();
+}
+
+function exportToDocs() {
+  if(!aiAnalysisText) return;
+  var btn = document.getElementById("btnDocs");
+  var originalText = btn.textContent;
+  btn.textContent = "⏳ Menyimpan...";
+  btn.disabled = true;
+  
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if(res.success) {
+        btn.textContent = "✅ Berhasil Disimpan";
+        window.open(res.url, '_blank');
+      } else {
+        alert("Gagal menyimpan ke Docs: " + res.error);
+        btn.textContent = originalText;
+      }
+      setTimeout(function(){ btn.disabled=false; btn.textContent=originalText; }, 3000);
+    })
+    .exportToGoogleDoc(aiAnalysisText);
+}
+
+function showEmailModal() { document.getElementById("emailModal").classList.remove("hidden"); }
+function hideEmailModal() { 
+  document.getElementById("emailModal").classList.add("hidden");
+  document.getElementById("emailStatus").textContent = ""; 
+}
+
+function sendAlert() {
+  var email = document.getElementById("inputEmail").value.trim();
+  var severity = document.getElementById("inputSeverity").value;
+  var stat = document.getElementById("emailStatus");
+  var btn = document.getElementById("btnSendEmail");
+  
+  if(!email || email.indexOf("@") === -1) { stat.textContent = "❌ Alamat email tidak valid."; return; }
+  if(!aiAnalysisText) { stat.textContent = "❌ Tidak ada laporan AI untuk dikirim."; return; }
+  
+  stat.textContent = "⏳ Sedang mengirim...";
+  btn.disabled = true;
+  
+  var reportHtml = renderMarkdown(aiAnalysisText);
+  
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if(res.success) {
+        stat.textContent = "✅ " + res.message;
+        setTimeout(hideEmailModal, 2000);
+      } else {
+        stat.textContent = "❌ Gagal: " + res.error;
+      }
+      btn.disabled = false;
+    })
+    .sendIncidentEmail(reportHtml, email, severity);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DIRECTORY
+   ═══════════════════════════════════════════════════════════ */
+var defenderCodes = [
+  {code:"Event ID 1116",title:"Malware Detection",type:"Event ID",description:"Windows Defender terdeteksi ancaman malware.",recommendation:"Periksa jalur file terinfeksi. Jalankan full scan."},
+  {code:"Event ID 1117",title:"Malware Action Taken",type:"Event ID",description:"Tindakan remediasi berhasil dilakukan pada malware.",recommendation:"Ancaman diamankan. Monitor aktivitas file."},
+  {code:"Event ID 1118",title:"Malware Action Failed",type:"Event ID",description:"Gagal melakukan tindakan remediasi terhadap ancaman.",recommendation:"SEGERA lakukan scan offline atau pembersihan manual!"},
+  {code:"Event ID 5001",title:"Real-time Protection Disabled",type:"Event ID",description:"Proteksi Real-time dinonaktifkan.",recommendation:"Aktifkan kembali: Set-MpPreference -DisableRealtimeMonitoring $false"},
+  {code:"Event ID 5007",title:"Defender Configuration Changed",type:"Event ID",description:"Konfigurasi Defender telah diubah.",recommendation:"Audit perubahan untuk mencegah bypass antivirus."},
+  {code:"Event ID 5009",title:"Antivirus is Disabled",type:"Event ID",description:"Antivirus sepenuhnya dimatikan.",recommendation:"🚨 Aktifkan kembali segera via Group Policy!"},
+  {code:"Event ID 3001",title:"Driver Load Blocked",type:"Event ID",description:"Code Integrity memblokir driver tidak bertanda tangan.",recommendation:"Pasang driver resmi WHQL."},
+  {code:"Event ID 3091",title:"WDAC Policy Blocked",type:"Event ID",description:"WDAC memblokir pemuatan file biner.",recommendation:"Tambahkan pengecualian jika file sah."},
+  {code:"0x80508015",title:"Scan/Cleanup Error",type:"HRESULT",description:"Kesalahan internal saat membersihkan ancaman.",recommendation:"Jalankan Microsoft Defender Offline Scan."},
+  {code:"0x80070005",title:"Access Denied",type:"HRESULT",description:"Operasi Defender diblokir. Mungkin rootkit.",recommendation:"Gunakan media bootable untuk scan."},
+  {code:"0x80070422",title:"Service Disabled",type:"HRESULT",description:"Layanan Defender dinonaktifkan.",recommendation:"sc config WinDefend start= auto"},
+  {code:"0x80070643",title:"Fatal Update Error",type:"HRESULT",description:"Gagal instal database keamanan.",recommendation:"Jalankan Windows Update Troubleshooter."}
+];
+
+function renderDirectory(){
+  var search=document.getElementById("dirSearch").value.toLowerCase();
+  var type=document.getElementById("dirType").value;
+  var html="";
+  defenderCodes.filter(function(item){
+    var match=item.code.toLowerCase().indexOf(search)!==-1||item.title.toLowerCase().indexOf(search)!==-1||item.description.toLowerCase().indexOf(search)!==-1;
+    var typeMatch=type==="All"||item.type===type;
+    return match&&typeMatch;
+  }).forEach(function(item){
+    html+='<div class="dir-item"><div class="dir-item-code">'+item.code+'</div><div class="dir-item-title">'+item.title+'</div><div class="dir-item-desc">'+item.description+'</div><div class="dir-item-rec">💡 '+item.recommendation+'</div></div>';
+  });
+  document.getElementById("dirList").innerHTML=html||'<div style="padding:24px;text-align:center;color:var(--text-muted)">Tidak ditemukan</div>';
+}
+function filterDirectory(){renderDirectory();}
+
+/* ═══════════════════════════════════════════════════════════
+   CHARTS (Google Charts)
+   ═══════════════════════════════════════════════════════════ */
+function renderCharts(){
+  google.charts.setOnLoadCallback(function(){
+    drawSeverityChart();
+    drawCategoryChart();
+    drawEventIdChart();
+    drawTimelineChart();
+  });
+}
+
+function drawSeverityChart(){
+  var s={Critical:0,Error:0,Warning:0,Information:0};
+  var cMap={Critical:"#ef4444",Error:"#f97316",Warning:"#eab308",Information:"#3b82f6"};
+  filteredLogs.forEach(function(l){if(s[l.level]!==undefined)s[l.level]++;});
+  var arr=[["Level","Count"]];
+  var cols=[];
+  ["Critical","Error","Warning","Information"].forEach(function(k){
+    if(s[k]>0){ arr.push([k,s[k]]); cols.push(cMap[k]); }
+  });
+  if(arr.length===1){ arr.push(["No Data",1]); cols.push("#e2e8f0"); }
+  var data = google.visualization.arrayToDataTable(arr);
+  var chart = new google.visualization.PieChart(document.getElementById("chartSeverity"));
+  chart.draw(data,{colors:cols,pieHole:0.4,legend:{position:"bottom"},chartArea:{width:"90%",height:"75%"},backgroundColor:"transparent"});
+}
+
+function drawCategoryChart(){
+  var cats={};filteredLogs.forEach(function(l){cats[l.category]=(cats[l.category]||0)+1;});
+  var sorted=Object.entries(cats).sort(function(a,b){return b[1]-a[1];}).slice(0,6);
+  var arr=[["Kategori","Jumlah", {role: "tooltip", type: "string", p: {html: true}}]];
+  sorted.forEach(function(e){
+    var cat = e[0];
+    var count = e[1];
+    var tt = "<div style='padding:12px; width:180px; font-family:sans-serif; border-left: 4px solid #3b82f6;'>"+
+             "<div style='font-size:13px; font-weight:bold; color:#0f172a; margin-bottom:4px;'>" + cat + "</div>" +
+             "<div style='font-size:12px; font-weight:600; color:#3b82f6;'>Total: " + count + " log</div>" +
+             "</div>";
+    arr.push([cat, count, tt]);
+  });
+  var data = google.visualization.arrayToDataTable(arr);
+  var chart = new google.visualization.BarChart(document.getElementById("chartCategory"));
+  
+  google.visualization.events.addListener(chart, 'select', function() {
+    var selection = chart.getSelection();
+    if (selection.length > 0) {
+      var row = selection[0].row;
+      var cat = data.getValue(row, 0);
+      document.getElementById("searchInput").value = cat;
+      switchTab("explorer");
+      applyFilters();
+    }
+  });
+  
+  chart.draw(data,{legend:"none",colors:["#3b82f6"],chartArea:{width:"65%",height:"80%"},backgroundColor:"transparent",hAxis:{textStyle:{fontSize:11},minValue:0,format:'#'},vAxis:{textStyle:{fontSize:11}},tooltip: { isHtml: true }});
+}
+
+function drawEventIdChart(){
+  var eids={};
+  filteredLogs.forEach(function(l){
+    var eid=String(l.eventId||"Unknown");
+    eids[eid]=(eids[eid]||0)+1;
+  });
+  var sorted=Object.entries(eids).sort(function(a,b){return b[1]-a[1];}).slice(0,10);
+  var arr=[["Event ID","Jumlah", {role: "tooltip", type: "string", p: {html: true}}]];
+  sorted.forEach(function(e){
+    var eid = e[0];
+    var count = e[1];
+    var k = (typeof kbEntries !== 'undefined' && kbEntries) ? kbEntries.find(function(x){return String(x['event-id']) === eid;}) : null;
+    var summary = k ? (k.summary || "Penjelasan tidak tersedia.") : "Tidak ditemukan di database KB lokal.";
+    var severity = k ? (k.criticality || "Unknown") : "Unknown";
+    var category = k ? (k.category || "General") : "General";
+    
+    var tt = "<div style='padding:12px; width:220px; font-family:sans-serif; border-left: 4px solid #10b981; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);'>"+
+             "<div style='font-size:14px; font-weight:bold; color:#0f172a; margin-bottom:4px;'>Event ID: " + eid + "</div>" +
+             "<div style='font-size:12px; font-weight:600; color:#10b981; margin-bottom:8px;'>Total Kejadian: " + count + "x</div>" +
+             "<div style='font-size:11px; color:#475569; margin-bottom:4px;'><strong>Kategori:</strong> " + category + "</div>" +
+             "<div style='font-size:11px; color:#475569; margin-bottom:8px;'><strong>Tingkat Bahaya:</strong> " + severity + "</div>" +
+             "<div style='font-size:11px; color:#334155; line-height:1.4; border-top:1px solid #e2e8f0; padding-top:6px;'><em>\"" + summary + "\"</em></div>" +
+             "</div>";
+             
+    arr.push(["ID " + eid, count, tt]);
+  });
+  var data = google.visualization.arrayToDataTable(arr);
+  var chart = new google.visualization.BarChart(document.getElementById("chartEventId"));
+  
+  google.visualization.events.addListener(chart, 'select', function() {
+    var selection = chart.getSelection();
+    if (selection.length > 0) {
+      var row = selection[0].row;
+      var cat = data.getValue(row, 0);
+      if (cat.startsWith("ID ")) cat = cat.substring(3);
+      document.getElementById("searchInput").value = cat;
+      switchTab("explorer");
+      applyFilters();
+    }
+  });
+  
+  chart.draw(data,{legend:"none",colors:["#10b981"],chartArea:{width:"65%",height:"80%"},backgroundColor:"transparent",hAxis:{textStyle:{fontSize:11},minValue:0,format:'#'},vAxis:{textStyle:{fontSize:11}},tooltip: { isHtml: true }});
+}
+
+function drawTimelineChart(){
+  if(filteredLogs.length===0)return;
+  var sorted=[...filteredLogs].sort(function(a,b){return new Date(a.timestamp)-new Date(b.timestamp);});
+  var groups={};
+  sorted.forEach(function(l){
+    var d=new Date(l.timestamp);
+    var h=d.getHours().toString().padStart(2,"0");
+    var m=d.getMinutes()<30?"00":"30";
+    var key=h+":"+m;
+    groups[key]=(groups[key]||0)+1;
+  });
+  var arr=[["Waktu","Jumlah"]];
+  Object.keys(groups).sort().forEach(function(k){arr.push([k,groups[k]]);});
+  var data=google.visualization.arrayToDataTable(arr);
+  var chart=new google.visualization.ColumnChart(document.getElementById("chartTimeline"));
+  chart.draw(data,{legend:"none",colors:["#8b5cf6"],chartArea:{width:"90%",height:"70%"},backgroundColor:"transparent",vAxis:{minValue:0,format:'#'}});
+}
+
+/* ═══════════════════════════════════════════════════════════
+   INFO TAB
+   ═══════════════════════════════════════════════════════════ */
+function renderInfoTab() {
+  if (filteredLogs.length === 0) return;
+  
+  var errMap = {};
+  var excMap = {};
+  
+  filteredLogs.forEach(function(l) {
+    if (l.level === "Error" || l.level === "Critical") {
+      var eid = String(l.eventId || "Unknown");
+      if (!errMap[eid]) errMap[eid] = {count: 0, cat: l.category, level: l.level, msg: l.message || "", source: l.source || ""};
+      errMap[eid].count++;
+      
+      var msg = l.message || "";
+      var excMatch = msg.match(/(?:Exception code|0x[0-9a-fA-F]{8})/i);
+      if (excMatch) {
+        var lines = msg.split("\n");
+        for (var i=0; i<lines.length; i++) {
+          if (lines[i].toLowerCase().indexOf("0x") !== -1 || lines[i].toLowerCase().indexOf("exception") !== -1) {
+            var detail = lines[i].trim().substring(0, 250);
+            if (!excMap[detail]) excMap[detail] = {count:0, eid: eid, app: l.source, fullMsg: msg};
+            excMap[detail].count++;
+          }
+        }
+      } else {
+         var lines = msg.split("\n");
+         var firstLine = (lines[0] || "").substring(0, 200);
+         if (firstLine && firstLine.length > 5) {
+            if (!excMap[firstLine]) excMap[firstLine] = {count:0, eid: eid, app: l.source, fullMsg: msg};
+            excMap[firstLine].count++;
+         }
+      }
+    }
+  });
+
+  var topErr = Object.keys(errMap).map(function(k){return {id:k, data:errMap[k]};}).sort(function(a,b){return b.data.count - a.data.count;}).slice(0, 30);
+  var htmlErr = "";
+  if (topErr.length === 0) {
+    htmlErr = '<tr><td colspan="4" style="text-align:center;padding:16px;color:var(--text-muted)">Tidak ada error terdeteksi</td></tr>';
+  } else {
+    topErr.forEach(function(e) {
+      var bClass = e.data.level==="Critical"?"badge-critical":"badge-error";
+      var safeMsg = e.data.msg.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      if (safeMsg.length > 250) safeMsg = safeMsg.substring(0, 250) + "...";
+      
+      htmlErr += '<tr onclick="document.getElementById(\'searchInput\').value=\''+e.id+'\';switchTab(\'explorer\');applyFilters()" style="cursor:pointer;transition:background 0.2s;">';
+      htmlErr += '<td><span class="badge badge-eventid" style="font-size:12px;padding:6px 10px">'+e.id+'</span></td>';
+      htmlErr += '<td><div style="margin-bottom:6px"><span class="badge '+bClass+'">'+e.data.level+'</span></div><div style="font-size:10px;color:var(--text-muted);font-weight:600">'+e.data.cat+'</div></td>';
+      htmlErr += '<td><div style="font-size:11px;color:var(--text);font-family:\'Inter\', sans-serif;line-height:1.5"><strong style="color:var(--primary)">['+e.data.source+']</strong><br><span style="font-family:monospace;background:rgba(0,0,0,0.03);padding:4px;border-radius:4px;display:inline-block;margin-top:4px">'+safeMsg+'</span></div></td>';
+      htmlErr += '<td style="font-weight:800;color:var(--danger);font-size:16px;text-align:center">'+e.data.count+'</td>';
+      htmlErr += '</tr>';
+    });
+  }
+  document.getElementById("topErrorTableBody").innerHTML = htmlErr;
+  
+  var allEventMap = {};
+  filteredLogs.forEach(function(l) {
+    var eid = String(l.eventId || "Unknown");
+    allEventMap[eid] = (allEventMap[eid] || 0) + 1;
+  });
+  var topAllEvents = Object.keys(allEventMap).map(function(k){return {id:k, count:allEventMap[k]};}).sort(function(a,b){return b.count - a.count;}).slice(0, 10);
+  var htmlAll = "";
+  if (topAllEvents.length === 0) {
+    htmlAll = '<tr><td colspan="2" style="text-align:center;padding:16px;color:var(--text-muted)">Tidak ada event terdeteksi</td></tr>';
+  } else {
+    topAllEvents.forEach(function(e) {
+      htmlAll += '<tr onclick="document.getElementById(\'searchInput\').value=\''+e.id+'\';switchTab(\'explorer\');applyFilters()" style="cursor:pointer;transition:background 0.2s;">';
+      htmlAll += '<td><span class="badge badge-eventid" style="font-size:12px;padding:6px 10px">ID '+e.id+'</span></td>';
+      htmlAll += '<td style="font-weight:800;color:var(--primary);font-size:16px;text-align:center">'+e.count+'</td>';
+      htmlAll += '</tr>';
+    });
+  }
+  var topAllEventTableBody = document.getElementById("topAllEventTableBody");
+  if(topAllEventTableBody) topAllEventTableBody.innerHTML = htmlAll;
+  
+  var topExc = Object.keys(excMap).map(function(k){return {msg:k, data:excMap[k]};}).sort(function(a,b){return b.data.count - a.data.count;}).slice(0, 30);
+  var htmlExc = "";
+  if (topExc.length === 0) {
+    htmlExc = '<tr><td colspan="2" style="text-align:center;padding:16px;color:var(--text-muted)">Tidak ada detail exception terdeteksi</td></tr>';
+  } else {
+    topExc.forEach(function(e) {
+      // Escape for HTML viewing
+      var safeMsgDisplay = e.msg.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      
+      // Full context for main & sub report (max 300 chars to prevent massive rows)
+      var fullMsgDisplay = e.data.fullMsg.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      if (fullMsgDisplay.length > 300) fullMsgDisplay = fullMsgDisplay.substring(0, 300) + "...";
+      
+      // Robust escape for JS string inside onclick attribute
+      // Limit to 50 chars for search so it's flexible but specific enough
+      var searchStr = e.msg.substring(0, 50);
+      var safeSearch = searchStr.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\n/g, " ").replace(/\r/g, "");
+      var htmlSafeSearch = safeSearch.replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      
+      htmlExc += '<tr onclick="document.getElementById(\'searchInput\').value=\''+htmlSafeSearch+'\';switchTab(\'explorer\');applyFilters()" style="cursor:pointer">';
+      htmlExc += '<td><div style="font-family:monospace;font-size:12px;word-break:break-word;color:var(--text);background:#f1f5f9;padding:8px;border-radius:6px;border:1px solid #e2e8f0;margin-bottom:6px"><strong>Poin Utama:</strong> ' + safeMsgDisplay + '</div><div style="font-size:11px;color:var(--text-muted);white-space:pre-wrap;margin-bottom:6px;line-height:1.4"><strong>Main & Sub Report:</strong><br>' + fullMsgDisplay + '</div><div style="font-size:10px;color:var(--text-muted);font-weight:600">Sumber: '+e.data.app+' | Event ID: '+e.data.eid+'</div></td>';
+      htmlExc += '<td style="font-weight:800;color:var(--danger);text-align:center;font-size:16px">'+e.data.count+'</td>';
+      htmlExc += '</tr>';
+    });
+  }
+  document.getElementById("topExceptionTableBody").innerHTML = htmlExc;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TAB: SUMMARY
+   ═══════════════════════════════════════════════════════════ */
+function renderSummaryTab() {
+  if (filteredLogs.length === 0 && !showingAllKB) {
+    document.getElementById("summaryTableBody").innerHTML = '<tr><td colspan="7" style="text-align:center;padding:16px;color:var(--text-muted)">Pilih file log terlebih dahulu</td></tr>';
+    document.getElementById("summaryUniqueCount").textContent = 0;
+    return;
+  }
+  
+  var agg = {};
+  if (!showingAllKB) {
+    filteredLogs.forEach(function(l) {
+      if (!agg[l.eventId]) {
+        agg[l.eventId] = { eventId: l.eventId, count: 0, maxSeverity: l.level, category: '-', description: '-', mitigation: '-', mitreTactic: '-', messages: {} };
+      }
+      agg[l.eventId].count++;
+      var msg = (l.message || "").trim();
+      if (msg) {
+        agg[l.eventId].messages[msg] = (agg[l.eventId].messages[msg] || 0) + 1;
+      }
+      var levels = { 'Critical': 4, 'Error': 3, 'Warning': 2, 'Information': 1, 'Unknown': 0 };
+      if (levels[l.level] > levels[agg[l.eventId].maxSeverity]) agg[l.eventId].maxSeverity = l.level;
+    });
+  } else {
+    kbEntries.forEach(function(k) {
+      if (!agg[k['event-id']]) {
+        agg[k['event-id']] = { eventId: k['event-id'], count: 0, maxSeverity: k.criticality || 'Unknown', category: k.category || '-', description: k.summary || '-', mitigation: k.mitigation || '-', mitreTactic: k.mitre_tactic || '-' };
+      }
+    });
+  }
+
+  var dataArr = Object.keys(agg).map(function(k) { return agg[k]; });
+  
+  if (kbLoaded) {
+    dataArr.forEach(function(d) {
+      var k = kbEntries.find(function(entry){return entry['event-id'] == d.eventId});
+      if (k) {
+        d.description = k.summary || '-';
+        d.mitigation = k.mitigation || '-';
+        d.mitreTactic = k.mitre_tactic || '-';
+        d.category = k.category || '-';
+      }
+    });
+  }
+
+  // Filter Search
+  var search = document.getElementById("summarySearch").value.toLowerCase();
+  if (search) {
+    dataArr = dataArr.filter(function(d) {
+      return String(d.eventId).toLowerCase().indexOf(search) > -1 || d.description.toLowerCase().indexOf(search) > -1;
+    });
+  }
+  
+  // Sort
+  dataArr.sort(function(a,b) {
+    var valA = a[summarySort.col];
+    var valB = b[summarySort.col];
+    if (summarySort.col === 'maxSeverity') {
+      var levels = { 'Critical': 4, 'Error': 3, 'Warning': 2, 'Information': 1, 'Unknown': 0 };
+      valA = levels[valA] || 0; valB = levels[valB] || 0;
+    }
+    if (valA < valB) return summarySort.dir === 'asc' ? -1 : 1;
+    if (valA > valB) return summarySort.dir === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  document.getElementById("summaryUniqueCount").textContent = dataArr.length;
+  
+  var html = "";
+  if (dataArr.length === 0) {
+    html = '<tr><td colspan="7" style="text-align:center;padding:16px;color:var(--text-muted)">Tidak ada data summary</td></tr>';
+  } else {
+    dataArr.forEach(function(d, index) {
+      var badgeClass = d.maxSeverity==="Critical"?"badge-critical":d.maxSeverity==="Error"?"badge-error":d.maxSeverity==="Warning"?"badge-warning":d.maxSeverity==="Information"?"badge-info":"";
+      var badgeHtml = badgeClass ? '<span class="badge '+badgeClass+'">'+d.maxSeverity+'</span>' : d.maxSeverity;
+      
+      var msgs = d.messages ? Object.keys(d.messages).map(function(k){ return {msg: k, count: d.messages[k]}; }).sort(function(a,b){return b.count - a.count;}) : [];
+      // Tampilkan tombol Expand jika terdapat lebih dari 1 pesan yang berbeda
+      var hasSub = msgs.length > 1;
+      var expandBtn = hasSub ? '<button onclick="toggleSubPanel(\'sub-msg-'+index+'\')" style="margin-left:8px;background:none;border:none;cursor:pointer;font-size:14px;" title="Lihat ragam variasi Info General">🔽</button>' : '';
+      
+      html += '<tr>' +
+        '<td><span class="badge badge-eventid">'+d.eventId+'</span>' + expandBtn + '</td>' +
+        '<td style="text-align:center;font-weight:700">'+(d.count > 0 ? d.count : '—')+'</td>' +
+        '<td>'+badgeHtml+'</td>' +
+        '<td>'+d.category+'</td>' +
+        '<td style="max-width:300px;font-size:11px">'+d.description+'</td>' +
+        '<td style="max-width:250px;font-size:11px;color:var(--text-muted)">'+d.mitigation+'</td>' +
+        '<td>'+d.mitreTactic+'</td>' +
+        '</tr>';
+        
+      if (hasSub) {
+        html += '<tr id="sub-msg-'+index+'" style="display:none;background:#f8fafc;">' +
+          '<td colspan="7" style="padding:16px;border-bottom:2px solid var(--border);">' +
+          '<div style="font-weight:bold;margin-bottom:8px;font-size:12px;color:var(--primary);">Sub-Summary Info General (Terdapat ' + msgs.length + ' variasi pesan):</div>' +
+          '<table style="width:100%;border-collapse:collapse;font-size:11px;background:#fff;border-radius:6px;overflow:hidden;border:1px solid #e2e8f0;">' +
+          '<thead style="background:#f1f5f9;"><tr style="border-bottom:1px solid #e2e8f0;"><th style="text-align:left;padding:8px;">Info General (Message)</th><th style="width:80px;text-align:center;padding:8px;">Jumlah</th></tr></thead><tbody>';
+        msgs.forEach(function(m) {
+           var safeM = m.msg.replace(/</g,"&lt;").replace(/>/g,"&gt;");
+           if (safeM.length > 400) safeM = safeM.substring(0, 400) + "...";
+           html += '<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:8px;font-family:monospace;word-break:break-word;">'+safeM+'</td><td style="text-align:center;padding:8px;font-weight:bold;color:var(--danger)">'+m.count+'</td></tr>';
+        });
+        html += '</tbody></table></td></tr>';
+      }
+    });
+  }
+  document.getElementById("summaryTableBody").innerHTML = html;
+}
+
+function toggleSubPanel(id) {
+  var el = document.getElementById(id);
+  if(el) {
+    el.style.display = el.style.display === "none" ? "table-row" : "none";
+  }
+}
+
+function showAllKB() {
+  showingAllKB = !showingAllKB;
+  var btn = document.getElementById("btnShowAllKB");
+  if (showingAllKB) {
+    btn.classList.add("btn-primary");
+    btn.classList.remove("btn-secondary");
+    if (!kbLoaded) {
+      btn.textContent = "⏳ Memuat KB...";
+      google.script.run.withSuccessHandler(function(json){
+        try{ kbEntries = JSON.parse(json); kbLoaded = true; }catch(e){}
+        btn.textContent = "Tampilkan Log Saja";
+        renderSummaryTab();
+      }).getKBEntries();
+    } else {
+      btn.textContent = "Tampilkan Log Saja";
+      renderSummaryTab();
+    }
+  } else {
+    btn.classList.add("btn-secondary");
+    btn.classList.remove("btn-primary");
+    btn.textContent = "Lihat Semua KB";
+    renderSummaryTab();
+  }
+}
+
+function sortSummary(col) {
+  if (summarySort.col === col) {
+    summarySort.dir = summarySort.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    summarySort.col = col;
+    summarySort.dir = 'asc';
+  }
+  renderSummaryTab();
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TAB: KB
+   ═══════════════════════════════════════════════════════════ */
+function renderKBTab() {
+  if (!kbLoaded) {
+    loadKBTab();
+  } else {
+    applyKBFilters();
+    renderKBStats();
+  }
+}
+
+function loadKBTab() {
+  if (kbLoaded) return;
+  var btn = document.getElementById("btnKbSync");
+  if (btn) btn.disabled = true;
+  google.script.run
+    .withSuccessHandler(function(json) {
+      try {
+        kbEntries = JSON.parse(json);
+        kbLoaded = true;
+        document.getElementById("kbErrorBanner").classList.add("hidden");
+        applyKBFilters();
+        renderKBStats();
+      } catch (e) {
+        document.getElementById("kbErrorBanner").textContent = "Gagal memparsing data KB";
+        document.getElementById("kbErrorBanner").classList.remove("hidden");
+      }
+      if (btn) btn.disabled = false;
+    })
+    .withFailureHandler(function(err) {
+      document.getElementById("kbErrorBanner").textContent = "Error memuat KB: " + err.message;
+      document.getElementById("kbErrorBanner").classList.remove("hidden");
+      if (btn) btn.disabled = false;
+    })
+    .getKBEntries();
+}
+
+function renderKBStats() {
+  var s = { Total: kbEntries.length, Critical: 0, High: 0, Medium: 0, Low: 0, Unknown: 0 };
+  kbEntries.forEach(function(k) {
+    if (s[k.criticality] !== undefined) s[k.criticality]++;
+    else s.Unknown++;
+  });
+  document.getElementById("kbStatTotal").textContent = s.Total;
+  document.getElementById("kbStatCritical").textContent = s.Critical;
+  document.getElementById("kbStatHigh").textContent = s.High;
+  document.getElementById("kbStatMedium").textContent = s.Medium;
+  document.getElementById("kbStatLow").textContent = s.Low;
+  document.getElementById("kbStatUnknown").textContent = s.Unknown;
+}
+
+function applyKBFilters() {
+  var search = document.getElementById("kbSearch").value.toLowerCase();
+  var crit = document.getElementById("kbCritFilter").value;
+  kbFiltered = kbEntries.filter(function(k) {
+    if (crit !== "All" && k.criticality !== crit && !(crit==="Unknown" && !k.criticality)) return false;
+    if (search) {
+      if (String(k['event-id']).indexOf(search) === -1 && String(k.summary || "").toLowerCase().indexOf(search) === -1) return false;
+    }
+    return true;
+  });
+  renderKBTable();
+}
+
+function renderKBTable() {
+  var tbody = document.getElementById("kbTableBody");
+  var html = "";
+  if (kbFiltered.length === 0) {
+    html = '<tr><td colspan="7" style="text-align:center;padding:16px;color:var(--text-muted)">Tidak ada entri KB ditemukan</td></tr>';
+  } else {
+    kbFiltered.forEach(function(k) {
+      var badgeClass = k.criticality==="Critical"?"badge-critical":k.criticality==="High"?"badge-error":k.criticality==="Medium"?"badge-warning":k.criticality==="Low"?"badge-info":"";
+      var critBadge = badgeClass ? '<span class="badge '+badgeClass+'">'+k.criticality+'</span>' : (k.criticality||'Unknown');
+      html += '<tr>' +
+        '<td><span class="badge badge-eventid">'+k['event-id']+'</span></td>' +
+        '<td>'+critBadge+'</td>' +
+        '<td style="font-size:11px;max-width:250px">'+(k.summary||'')+'</td>' +
+        '<td>'+(k.category||'-')+'</td>' +
+        '<td style="font-size:10px;color:var(--text-muted);max-width:200px">'+(k.mitigation||'-')+'</td>' +
+        '<td>'+(k.mitre_tactic||'-')+'</td>' +
+        '<td>' +
+          '<button class="btn btn-secondary btn-sm" onclick="openEditModal(\''+k['event-id']+'\')" style="padding:2px 6px;margin-right:4px">✏️</button>' +
+          '<button class="btn btn-secondary btn-sm" onclick="deleteEntry(\''+k['event-id']+'\')" style="padding:2px 6px;color:var(--danger)">🗑️</button>' +
+        '</td>' +
+        '</tr>';
+    });
+  }
+  tbody.innerHTML = html;
+}
+
+function openAddForm() {
+  document.getElementById("kbAddForm").classList.remove("hidden");
+}
+
+function closeAddForm() {
+  document.getElementById("kbAddForm").classList.add("hidden");
+}
+
+function submitAddEntry() {
+  var idStr = document.getElementById("addEventId").value.trim();
+  var summary = document.getElementById("addSummary").value.trim();
+  if (!/^\d+$/.test(idStr)) { alert("Event ID harus angka."); return; }
+  if (!summary) { alert("Summary wajib diisi."); return; }
+  
+  if (kbEntries.find(function(k){return k['event-id'] == idStr})) {
+    alert("Event ID " + idStr + " sudah ada di KB."); return;
+  }
+  
+  var entry = {
+    "event-id": idStr,
+    "legacy-event-id": document.getElementById("addLegacyEventId").value.trim(),
+    "criticality": document.getElementById("addCriticality").value,
+    "summary": summary,
+    "category": document.getElementById("addCategory").value.trim(),
+    "mitigation": document.getElementById("addMitigation").value.trim(),
+    "mitre_tactic": document.getElementById("addMitre").value.trim(),
+    "source_log": document.getElementById("addSourceLog").value.trim(),
+    "os_version": document.getElementById("addOsVersion").value.trim()
+  };
+  
+  google.script.run
+    .withSuccessHandler(function(resStr) {
+      try {
+        var res = JSON.parse(resStr);
+        if (res.success) {
+          kbEntries.push(res.entry);
+          applyKBFilters();
+          renderKBStats();
+          closeAddForm();
+          // clear fields
+          document.getElementById("addEventId").value = "";
+          document.getElementById("addSummary").value = "";
+          document.getElementById("addMitigation").value = "";
+          if (typeof renderSummaryTab === 'function') renderSummaryTab();
+        } else {
+          alert("Gagal menambah: " + res.error);
+        }
+      } catch(e) { alert("Error parsing response"); }
+    })
+    .withFailureHandler(function(e) { alert("Error: " + e.message); })
+    .addKBEntry(JSON.stringify(entry));
+}
+
+function openEditModal(eventId) {
+  var k = kbEntries.find(function(e) { return e['event-id'] == eventId; });
+  if (!k) return;
+  document.getElementById("kbEditError").classList.add("hidden");
+  document.getElementById("editEventId").value = k['event-id'];
+  document.getElementById("editEventIdHidden").value = k['event-id'];
+  document.getElementById("editLegacyEventId").value = k['legacy-event-id'] || '';
+  document.getElementById("editCriticality").value = k.criticality || 'Unknown';
+  document.getElementById("editSummary").value = k.summary || '';
+  document.getElementById("editCategory").value = k.category || '';
+  document.getElementById("editMitigation").value = k.mitigation || '';
+  document.getElementById("editMitre").value = k.mitre_tactic || '';
+  document.getElementById("editSourceLog").value = k.source_log || '';
+  document.getElementById("editOsVersion").value = k.os_version || '';
+  document.getElementById("kbEditModal").classList.remove("hidden");
+}
+
+function closeEditModal() {
+  document.getElementById("kbEditModal").classList.add("hidden");
+}
+
+function submitEditEntry() {
+  var eventId = document.getElementById("editEventIdHidden").value;
+  var fields = {
+    "legacy-event-id": document.getElementById("editLegacyEventId").value.trim(),
+    "criticality": document.getElementById("editCriticality").value,
+    "summary": document.getElementById("editSummary").value.trim(),
+    "category": document.getElementById("editCategory").value.trim(),
+    "mitigation": document.getElementById("editMitigation").value.trim(),
+    "mitre_tactic": document.getElementById("editMitre").value.trim(),
+    "source_log": document.getElementById("editSourceLog").value.trim(),
+    "os_version": document.getElementById("editOsVersion").value.trim()
+  };
+  
+  google.script.run
+    .withSuccessHandler(function(resStr) {
+      try {
+        var res = JSON.parse(resStr);
+        if (res.success) {
+          var k = kbEntries.find(function(e) { return e['event-id'] == eventId; });
+          if (k) {
+            for (var key in fields) k[key] = fields[key];
+          }
+          applyKBFilters();
+          renderKBStats();
+          closeEditModal();
+          if (typeof renderSummaryTab === 'function') renderSummaryTab();
+        } else {
+          document.getElementById("kbEditError").textContent = "Gagal mengupdate: " + res.error;
+          document.getElementById("kbEditError").classList.remove("hidden");
+        }
+      } catch(e) { 
+        document.getElementById("kbEditError").textContent = "Error parsing response";
+        document.getElementById("kbEditError").classList.remove("hidden");
+      }
+    })
+    .withFailureHandler(function(e) { 
+        document.getElementById("kbEditError").textContent = "Error: " + e.message;
+        document.getElementById("kbEditError").classList.remove("hidden");
+    })
+    .updateKBEntry(eventId, JSON.stringify(fields));
+}
+
+function deleteEntry(eventId) {
+  if (!confirm("Hapus Event ID " + eventId + " dari Knowledge Base?")) return;
+  google.script.run
+    .withSuccessHandler(function(resStr) {
+      try {
+        var res = JSON.parse(resStr);
+        if (res.success) {
+          kbEntries = kbEntries.filter(function(e) { return e['event-id'] != eventId; });
+          applyKBFilters();
+          renderKBStats();
+          if (typeof renderSummaryTab === 'function') renderSummaryTab();
+        } else {
+          alert("Gagal menghapus: " + res.error);
+        }
+      } catch(e) { alert("Error parsing response"); }
+    })
+    .withFailureHandler(function(e) { alert("Error: " + e.message); })
+    .deleteKBEntry(eventId);
+}
+
+function syncKBCache() {
+  var btn = document.getElementById("btnKbSync");
+  if(btn) btn.disabled = true;
+  google.script.run
+    .withSuccessHandler(function(resStr) {
+      kbLoaded = false;
+      loadKBTab();
+    })
+    .withFailureHandler(function(e) {
+      alert("Gagal sync: " + e.message);
+      if(btn) btn.disabled = false;
+    })
+    .refreshKBCache();
+}
+
+function exportKB(format) {
+  if (kbEntries.length === 0) { alert("KB kosong"); return; }
+  var content = "";
+  var fileName = "kb-export." + format;
+  var mimeType = "text/plain";
+  
+  if (format === 'json') {
+    content = JSON.stringify(kbEntries, null, 2);
+    mimeType = "application/json";
+  } else if (format === 'csv') {
+    var headers = ["event-id","legacy-event-id","criticality","summary","category","mitigation","mitre_tactic","source_log","os_version"];
+    content = headers.join(",") + "\n";
+    kbEntries.forEach(function(k) {
+      var row = headers.map(function(h) {
+        var val = String(k[h] || "");
+        if (val.indexOf(",") !== -1 || val.indexOf("\n") !== -1 || val.indexOf('"') !== -1) {
+          val = '"' + val.replace(/"/g, '""') + '"';
+        }
+        return val;
+      });
+      content += row.join(",") + "\n";
+    });
+    mimeType = "text/csv";
+  }
+  
+  var blob = new Blob([content], { type: mimeType });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   API KEY MODAL
+   ═══════════════════════════════════════════════════════════ */
+function showApiKeyModal(){document.getElementById("apiKeyModal").classList.remove("hidden");}
+function hideApiKeyModal(){document.getElementById("apiKeyModal").classList.add("hidden");}
+function saveKeys(){
+  var g=document.getElementById("inputGemini").value.trim();
+  var o=document.getElementById("inputOpenai").value.trim();
+  if(g) google.script.run.withSuccessHandler(function(){}).saveApiKey("GEMINI_API_KEY",g);
+  if(o) google.script.run.withSuccessHandler(function(){}).saveApiKey("OPENAI_API_KEY",o);
+  hideApiKeyModal();
+  // Refresh badge
+  setTimeout(function(){
+    google.script.run.withSuccessHandler(function(keys){
+      var badge=document.getElementById("kbBadge");
+      badge.textContent="📚 KB: "+(keys.kbSize||0)+" entri"+(keys.gemini?" | 🤖 Gemini ✓":"")+(keys.openai?" | 🧠 OpenAI ✓":"");
+    }).checkApiKeys();
+  }, 1000);
+}
+
+/* AI Chat Logic */
+var chatHistory = [];
+function toggleChatWindow() {
+  document.getElementById("chatWindow").classList.toggle("hidden");
+}
+
+function generateChatContext() {
+  if (typeof filteredLogs === 'undefined' || filteredLogs.length === 0) return "Tidak ada log yang dimuat saat ini.";
+  var criticalLogs = filteredLogs.filter(function(l) { return l.level === "Critical" || l.level === "Error"; }).slice(0, 5);
+  var ctx = "Total Log Saat Ini: " + filteredLogs.length + " baris.\n";
+  if (criticalLogs.length > 0) {
+    ctx += "5 Error/Critical Teratas:\n";
+    criticalLogs.forEach(function(l) {
+      ctx += "- [EventID " + l.eventId + " / " + l.source + "] " + (l.message ? l.message.substring(0, 100) : "N/A") + "...\n";
+    });
+  } else {
+    ctx += "Tidak ada log level Error/Critical.\n";
+  }
+  if (typeof categoryCounts !== 'undefined') {
+    ctx += "Kategori:\n" + JSON.stringify(categoryCounts) + "\n";
+  }
+  return ctx;
+}
+
+function sendChatMessage() {
+  var input = document.getElementById("chatInput");
+  var text = input.value.trim();
+  if (!text) return;
+  
+  // Append user message
+  var msgsDiv = document.getElementById("chatMessages");
+  var userBubble = document.createElement("div");
+  userBubble.className = "chat-bubble user";
+  userBubble.textContent = text;
+  msgsDiv.appendChild(userBubble);
+  msgsDiv.scrollTop = msgsDiv.scrollHeight;
+  
+  // Save to history & clear input
+  chatHistory.push({ role: "user", text: text });
+  input.value = "";
+  
+  // Show typing
+  document.getElementById("chatTyping").style.display = "block";
+  document.getElementById("btnSendChat").disabled = true;
+  
+  var contextStr = generateChatContext();
+  
+  google.script.run
+    .withSuccessHandler(function(res) {
+      document.getElementById("chatTyping").style.display = "none";
+      document.getElementById("btnSendChat").disabled = false;
+      var obj = JSON.parse(res);
+      var aiBubble = document.createElement("div");
+      aiBubble.className = "chat-bubble ai markdown-body";
+      aiBubble.style.padding = "10px 14px";
+      aiBubble.style.fontSize = "13px";
+      
+      if (obj.success) {
+        aiBubble.innerHTML = typeof renderMarkdown === 'function' ? renderMarkdown(obj.response) : obj.response;
+        chatHistory.push({ role: "model", text: obj.response });
+      } else {
+        aiBubble.textContent = "Error: " + obj.error;
+      }
+      msgsDiv.appendChild(aiBubble);
+      msgsDiv.scrollTop = msgsDiv.scrollHeight;
+    })
+    .withFailureHandler(function(err) {
+      document.getElementById("chatTyping").style.display = "none";
+      document.getElementById("btnSendChat").disabled = false;
+      var aiBubble = document.createElement("div");
+      aiBubble.className = "chat-bubble ai";
+      aiBubble.style.color = "red";
+      aiBubble.textContent = "Gagal menghubungi server: " + err.message;
+      msgsDiv.appendChild(aiBubble);
+      msgsDiv.scrollTop = msgsDiv.scrollHeight;
+    })
+    .handleAIChat(JSON.stringify(chatHistory), contextStr);
+}
+</script>
+<!-- AI Chat Assistant -->
+<div class="chat-fab" onclick="toggleChatWindow()">🤖</div>
+<div class="chat-window hidden" id="chatWindow">
+  <div class="chat-header">
+    <div>🤖 AI Assistant</div>
+    <div class="chat-close" onclick="toggleChatWindow()">✕</div>
+  </div>
+  <div class="chat-messages" id="chatMessages">
+    <div class="chat-bubble ai">Halo! Saya asisten AI untuk menganalisis log sistem Windows Anda. Silakan unggah file `.evtx` Anda lalu tanyakan kepada saya tentang penyebab error yang ada!</div>
+  </div>
+  <div class="typing-indicator" id="chatTyping">AI sedang mengetik...</div>
+  <div class="chat-input-area">
+    <textarea class="chat-input" id="chatInput" rows="1" placeholder="Tanyakan solusi error..." onkeydown="if(event.key === 'Enter' && !event.shiftKey){ event.preventDefault(); sendChatMessage(); }"></textarea>
+    <button class="btn-send" id="btnSendChat" onclick="sendChatMessage()">➤</button>
+  </div>
+</div>
+
+</body>
+</html>

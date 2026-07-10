@@ -1,17 +1,25 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
-import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
 import OpenAI from "openai";
+import { exec } from "child_process";
 
 dotenv.config();
 
 // Load Windows Event ID Knowledge Base (offline)
 let windowsKB: any[] = [];
 try {
-  const kbPath = path.join(process.cwd(), "src", "data", "kb", "database", "windowseventid.json");
+  // @ts-ignore
+  const isPkg = typeof process.pkg !== 'undefined';
+  if (isPkg) {
+    process.env.NODE_ENV = "production";
+  }
+  
+  // @ts-ignore
+  const baseDir = isPkg ? path.join(__dirname, "..") : process.cwd();
+  const kbPath = path.join(baseDir, "src", "data", "kb", "database", "windowseventid.json");
   if (fs.existsSync(kbPath)) {
     windowsKB = JSON.parse(fs.readFileSync(kbPath, "utf-8"));
     console.log(`Loaded Windows Event ID KB: ${windowsKB.length} entries.`);
@@ -164,6 +172,9 @@ ${errorLogs.length > 0 ? `- **Kesalahan Sistem/Aplikasi**: Terdapat ${errorLogs.
 ${warningLogs.length > 0 ? `- **Indikasi Peringatan Keamanan**: Ditemukan ${warningLogs.length} log peringatan (warning) dari sumber \`${warningLogs[0]?.source || "N/A"}\` yang perlu dipantau untuk mencegah terjadinya kegagalan sistem yang lebih besar.\n` : ""}
 - **Sumber Utama Penyebab**: Masalah didominasi oleh ketidakselarasan konfigurasi atau kegagalan pembaruan modul pendukung sistem.
 
+**🔝 Top 10 Event ID Terbanyak:**
+${top10EventIds.length > 0 ? top10EventIds.map(e => `- **Event ID ${e[0]}**: ${e[1]} kejadian`).join("\n") : "- *Tidak ada Event ID spesifik yang terdeteksi.*"}
+
 3. **Analisis Defender Endpoint (Bila relevan)**
 Pencocokan tanda tangan dengan Kamus Masalah Microsoft Defender Endpoint:
 ${matchedCodes.length > 0 ? matchedCodes.map(m => `- **Ditemukan Kode ${m.code} (${m.title})**: ${m.rec}`).join("\n") : "- *Tidak ditemukan Event ID atau HRESULT spesifik Microsoft Defender Endpoint dalam log terfilter saat ini.*"}
@@ -254,6 +265,19 @@ async function startServer() {
         .map(([cat, count]) => `${cat}: ${count}`)
         .join(", ");
 
+      const eventIdMapForAI: Record<string, number> = {};
+      logs.forEach((log: any) => {
+        const eid = log.eventId?.toString();
+        if (eid) {
+          eventIdMapForAI[eid] = (eventIdMapForAI[eid] || 0) + 1;
+        }
+      });
+      const top10EventIdsForAI = Object.entries(eventIdMapForAI)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(e => `Event ID ${e[0]}: ${e[1]} kejadian`)
+        .join(", ");
+
 const systemInstruction = `Anda adalah seorang Enterprise Windows Security & System Administrator expert.
 Tugas Anda adalah menganalisis log Windows Event Viewer (System & Application) untuk menemukan bukti (evidence) kendala, crash, atau indikasi ancaman keamanan dalam ${timeFrameText || "waktu"} terakhir log.
 Fokus khusus pada troubleshooting, penanganan error, kecocokan dengan Defender Endpoint Event & Error Codes (seperti Defender Event ID 1116, 1117, 5001, 5007, atau HRESULT error codes seperti 0x80508015, 0x80070005, dll. yang merujuk pada https://learn.microsoft.com/en-us/defender-endpoint/event-error-codes).
@@ -273,6 +297,7 @@ Gunakan nada bicara yang profesional, teknis, mantap, dan mudah dipahami oleh ti
       const prompt = `Berikut adalah data statistik log yang dianalisis:
 - Timeframe analisis: ${timeFrameText || "3 jam terakhir"}
 - Distribusi tingkat keparahan / kategori: ${statsSummary || "N/A"}
+- Top 10 Event ID: ${top10EventIdsForAI || "N/A"}
 - Jumlah log kritis yang dikirim untuk analisis mendalam: ${logs.length} log.
 
 Berikut adalah detail dari log-log penting / bermasalah:
@@ -348,14 +373,36 @@ Silakan lakukan analisis mendalam terhadap log di atas sesuai dengan instruksi s
 
   // Serve static assets & route all requests to index.html in production
   if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
+    // Dynamic import to avoid breaking pkg bundler
+    const viteModule = await import("vite");
+    const vite = await viteModule.createServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), "dist");
+    // @ts-ignore
+    const isPkg = typeof process.pkg !== 'undefined';
+    // Use __dirname directly as distPath if we are running in pkg, because server.cjs is IN dist!
+    const distPath = isPkg ? __dirname : path.join(process.cwd(), "dist");
+    
     app.use(express.static(distPath));
+    
+    // Debug endpoint to help diagnose pkg paths
+    app.get("/api/debug", (req, res) => {
+      try {
+        res.json({
+          dirname: __dirname,
+          cwd: process.cwd(),
+          distPath,
+          files: fs.readdirSync(__dirname),
+          parentFiles: fs.readdirSync(path.join(__dirname, ".."))
+        });
+      } catch(e: any) {
+        res.json({ error: e.toString() });
+      }
+    });
+
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
@@ -363,6 +410,13 @@ Silakan lakukan analisis mendalam terhadap log di atas sesuai dengan instruksi s
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on port ${PORT}`);
+    console.log(`🚀 Event Viewer Analyzer is ready at http://localhost:${PORT}`);
+    
+    // Auto-open browser in production/exe mode
+    if (process.env.NODE_ENV === "production") {
+      const startCmd = process.platform === 'win32' ? 'start' : (process.platform === 'darwin' ? 'open' : 'xdg-open');
+      exec(`${startCmd} http://localhost:${PORT}`);
+    }
   });
 }
 

@@ -30,12 +30,15 @@ import {
   Download,
   BookOpen,
   SlidersHorizontal,
-  Plus
+  Plus,
+  BarChart2
 } from "lucide-react";
 import { generateScenarios } from "./data/incidentScenarios";
-import { parseEventXml, parseEventCsv, parseEventText, computeCategory } from "./utils/logParser";
+import { parseEventXml, parseEventCsv, parseEventText, computeCategory, parseEventEvtx } from "./utils/logParser";
 import { defenderErrorCodes, lookupErrorCode } from "./utils/defenderDirectory";
 import { EventLogEntry, IncidentScenario, DefenderErrorCode } from "./types";
+import { DashboardAnalytics } from "./components/DashboardAnalytics";
+import { RemediationGenerator } from "./components/RemediationGenerator";
 
 export default function App() {
   const scenarios = useMemo(() => generateScenarios(), []);
@@ -43,7 +46,7 @@ export default function App() {
   // Application State
   const [logs, setLogs] = useState<EventLogEntry[]>(scenarios[0].logs);
   const [selectedScenarioName, setSelectedScenarioName] = useState<string>(scenarios[0].name);
-  const [activeTab, setActiveTab] = useState<"explorer" | "directory">("explorer");
+  const [activeTab, setActiveTab] = useState<"explorer" | "directory" | "analytics">("explorer");
   const [selectedLog, setSelectedLog] = useState<EventLogEntry | null>(scenarios[0].logs[0] || null);
   
   // Filter States
@@ -66,8 +69,14 @@ export default function App() {
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 100;
+
   const [copiedAi, setCopiedAi] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
+  const [analysisProgress, setAnalysisProgress] = useState(0);
   const [isHeuristicFallback, setIsHeuristicFallback] = useState(false);
   const [isOpenAiActive, setIsOpenAiActive] = useState(false);
 
@@ -164,12 +173,21 @@ export default function App() {
 
   // Calculate stats for filtered view
   const categoryStats = useMemo(() => {
+    // Reset pagination when filters change
+    setCurrentPage(1);
+    
     const stats: Record<string, number> = {};
     filteredLogs.forEach(log => {
       stats[log.category] = (stats[log.category] || 0) + 1;
     });
     return stats;
   }, [filteredLogs]);
+
+  // Paginated Logs
+  const paginatedLogs = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredLogs.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredLogs, currentPage]);
 
   const severityStats = useMemo(() => {
     const stats = { Critical: 0, Error: 0, Warning: 0, Information: 0 };
@@ -201,27 +219,30 @@ export default function App() {
       // Update progress
       setUploadProgress(Math.round(((i) / validFiles.length) * 100));
 
-      if (lowerName.endsWith(".evtx")) {
-        detectedEvtx.push(fileName);
-        filesDetail.push({ name: fileName, count: 0, isEvtx: true });
-        continue;
-      }
-      
-      const text = await file.text();
       let parsed: EventLogEntry[] = [];
       
-      // Let UI update
-      await new Promise(r => setTimeout(r, 10));
+      const onProgress = (percent: number) => {
+        const base = (i / validFiles.length) * 100;
+        const add = (percent / 100) * (100 / validFiles.length);
+        setUploadProgress(Math.round(base + add));
+      };
 
-      if (lowerName.endsWith(".xml")) {
-        parsed = parseEventXml(text, fastScanMode);
-      } else if (lowerName.endsWith(".csv")) {
-        parsed = parseEventCsv(text, fastScanMode);
+      if (lowerName.endsWith(".evtx")) {
+        detectedEvtx.push(fileName);
+        const arrayBuffer = await file.arrayBuffer();
+        parsed = await parseEventEvtx(arrayBuffer, fastScanMode, onProgress);
+        filesDetail.push({ name: fileName, count: parsed.length, isEvtx: true });
       } else {
-        parsed = parseEventText(text, fastScanMode);
+        const text = await file.text();
+        if (lowerName.endsWith(".xml")) {
+          parsed = await parseEventXml(text, fastScanMode, onProgress);
+        } else if (lowerName.endsWith(".csv")) {
+          parsed = await parseEventCsv(text, fastScanMode, onProgress);
+        } else {
+          parsed = await parseEventText(text, fastScanMode, onProgress);
+        }
+        filesDetail.push({ name: fileName, count: parsed.length });
       }
-
-      filesDetail.push({ name: fileName, count: parsed.length });
 
       if (parsed.length > 0) {
         loadedLogs = [...loadedLogs, ...parsed];
@@ -243,22 +264,17 @@ export default function App() {
       
       let statusMsg = `Berhasil memuat ${loadedLogs.length} entri dari ${activeFilesCount} file.`;
       if (detectedEvtx.length > 0) {
-        statusMsg += ` (${detectedEvtx.length} file .evtx biner membutuhkan ekspor)`;
+        statusMsg += ` (Termasuk ${detectedEvtx.length} file .evtx biner)`;
       }
       setUploadStatus(statusMsg);
       setSelectedLog(loadedLogs[0] || null);
       setAiAnalysis(null);
       setAiError(null);
-    } else if (detectedEvtx.length > 0) {
-      setLogs([]);
-      setLoadedFiles(filesDetail);
-      setSelectedScenarioName("Custom Log Upload (EVTX)");
-      setUploadStatus(`Format biner .evtx terdeteksi (${detectedEvtx.length} file). Silakan ikuti Panduan Ekspor ke XML/CSV di bawah.`);
-      setSelectedLog(null);
-      setAiAnalysis(null);
-      setAiError(null);
+      setCurrentPage(1);
     } else {
-      setUploadStatus("Gagal memuat log. Pastikan format file berupa XML, CSV, atau file teks Event Viewer yang valid.");
+      setUploadStatus(
+        "Gagal memuat log. Pastikan format file valid, atau matikan fitur 'Mode Pindai Cepat' jika file Anda mungkin hanya berisi log Informasi (Information)."
+      );
       setLoadedFiles([]);
     }
     
@@ -331,11 +347,20 @@ export default function App() {
     setAiAnalysis(null);
     setIsHeuristicFallback(false);
     setIsOpenAiActive(false);
+    setAnalysisProgress(0);
+
+    const intervalId = setInterval(() => {
+      setAnalysisProgress(prev => {
+        if (prev >= 98) return prev;
+        const increment = prev < 40 ? 4 : (prev < 70 ? 2 : 1);
+        return prev + increment;
+      });
+    }, 400);
 
     // Filter only abnormal logs (Critical, Error, Warning) to avoid spamming the token size
     const abnormalLogs = filteredLogs.filter(l => ["Critical", "Error", "Warning"].includes(l.level));
-    // Fallback to sending some information logs if there are no warnings or errors
-    const logsToSend = abnormalLogs.length > 0 ? abnormalLogs : filteredLogs.slice(0, 30);
+    // Limit to max 50 logs to prevent token overload
+    const logsToSend = abnormalLogs.length > 0 ? abnormalLogs.slice(0, 50) : filteredLogs.slice(0, 30);
 
     try {
       const response = await fetch("/api/analyze-logs", {
@@ -357,10 +382,16 @@ export default function App() {
       setAiAnalysis(data.analysis);
       setIsHeuristicFallback(!!data.isHeuristicFallback);
       setIsOpenAiActive(!!data.isOpenAiActive);
+      
+      clearInterval(intervalId);
+      setAnalysisProgress(100);
+      setTimeout(() => {
+        setIsAnalyzing(false);
+      }, 700);
     } catch (err: any) {
+      clearInterval(intervalId);
       console.error(err);
       setAiError(err.message || "Gagal terhubung ke modul kecerdasan buatan.");
-    } finally {
       setIsAnalyzing(false);
     }
   };
@@ -480,6 +511,17 @@ export default function App() {
               >
                 <BookOpen className="h-3.5 w-3.5" />
                 Defender Directory
+              </button>
+              <button
+                onClick={() => setActiveTab("analytics")}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all duration-200 flex items-center gap-1.5 cursor-pointer ${
+                  activeTab === "analytics"
+                    ? "bg-white text-blue-600 shadow-sm border border-slate-200/60 font-bold"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <BarChart2 className="h-3.5 w-3.5" />
+                Analytics Dashboard
               </button>
             </div>
           </div>
@@ -621,60 +663,16 @@ export default function App() {
                           <FileText className={`h-3 w-3 shrink-0 ${f.isEvtx ? "text-amber-500" : "text-blue-500"}`} />
                           <span className="text-slate-700 font-mono truncate" title={f.name}>{f.name}</span>
                         </div>
-                        {f.isEvtx ? (
-                          <span className="text-[8.5px] font-bold px-1.5 py-0.2 rounded font-mono bg-amber-50 text-amber-600 border border-amber-200">
-                            Biner (Butuh Ekspor)
-                          </span>
-                        ) : (
-                          <span className={`text-[9.5px] font-bold px-1.5 py-0.2 rounded font-mono ${f.count > 0 ? "bg-blue-50 text-blue-600" : "bg-slate-100 text-slate-400"}`}>
-                            {f.count} Event
-                          </span>
-                        )}
+                        <span className={`text-[9.5px] font-bold px-1.5 py-0.2 rounded font-mono border ${f.count > 0 ? (f.isEvtx ? "bg-amber-50 text-amber-600 border-amber-200" : "bg-blue-50 text-blue-600 border-blue-200") : "bg-slate-100 text-slate-400 border-slate-200"}`}>
+                          {f.count} Event
+                        </span>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
 
-              {evtxFilesDetected.length > 0 && (
-                <div className="mt-4 border-t border-slate-200 pt-4 text-left animate-fadeIn">
-                  <div className="bg-amber-50/75 border border-amber-200 rounded-xl p-3.5 shadow-sm">
-                    <div className="flex items-center gap-1.5 text-xs text-amber-850 font-bold mb-2">
-                      <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 animate-pulse" />
-                      💡 Panduan Singkat Ekspor Berkas .evtx ke XML / CSV (3 Detik)
-                    </div>
-                    <p className="text-[10px] text-slate-600 mb-3 leading-relaxed font-medium">
-                      Berkas <strong className="text-slate-800">.evtx</strong> adalah database biner terenkripsi internal Windows yang tidak dapat dibaca langsung oleh peramban (browser). Silakan ekspor terlebih dahulu melalui <strong className="text-slate-800">Windows Event Viewer</strong> dengan cara berikut:
-                    </p>
-                    <div className="space-y-2.5 text-[10px] text-slate-700 font-sans">
-                      <div className="flex gap-2">
-                        <span className="w-4 h-4 rounded-full bg-amber-600 text-white font-mono flex items-center justify-center font-bold text-[9px] shrink-0">1</span>
-                        <div>
-                          <strong>Buka Berkas:</strong> Double-click berkas <code className="bg-white/80 border border-amber-200 px-1 py-0.2 rounded font-mono text-[9px]">.evtx</code> Anda di Windows untuk membukanya secara otomatis di <strong className="text-slate-800">Event Viewer</strong>.
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <span className="w-4 h-4 rounded-full bg-amber-600 text-white font-mono flex items-center justify-center font-bold text-[9px] shrink-0">2</span>
-                        <div>
-                          <strong>Simpan Sebagai XML/CSV:</strong> Pada panel menu sebelah kanan (panel <strong className="text-slate-800">Actions</strong>), klik opsi <strong className="text-slate-800">"Save All Events As..."</strong> (*Simpan Semua Kejadian Sebagai...*).
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <span className="w-4 h-4 rounded-full bg-amber-600 text-white font-mono flex items-center justify-center font-bold text-[9px] shrink-0">3</span>
-                        <div>
-                          <strong>Pilih Format Ekspor:</strong> Ubah kolom <em>"Save as type"</em> menjadi <strong className="text-blue-700 font-bold">XML (*.xml)</strong> (Sangat Direkomendasikan) atau <strong className="text-blue-700 font-bold">CSV (*.csv)</strong>, kemudian klik <strong className="text-slate-800">Save</strong>.
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <span className="w-4 h-4 rounded-full bg-amber-600 text-white font-mono flex items-center justify-center font-bold text-[9px] shrink-0">4</span>
-                        <div>
-                          <strong>Unggah & Analisis:</strong> Seret atau unggah berkas hasil ekspor <code className="bg-white/80 border border-amber-200 px-1 py-0.2 rounded font-mono text-[9px]">.xml</code> atau <code className="bg-white/80 border border-amber-200 px-1 py-0.2 rounded font-mono text-[9px]">.csv</code> tersebut (bisa langsung multi-file atau 1 folder) ke aplikasi ini untuk dianalisis instan oleh AI!
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+
             </div>
 
             {/* Simulated Case Scenarios */}
@@ -721,20 +719,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Instruction Panel on Windows Exporting */}
-            <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 text-[11px] text-slate-600 shadow-sm">
-              <h4 className="font-bold text-slate-800 flex items-center gap-1.5 mb-2">
-                <Terminal className="h-3.5 w-3.5 text-blue-600" />
-                Cara Ekspor Log Windows Anda:
-              </h4>
-              <ol className="list-decimal list-inside space-y-1 text-slate-500">
-                <li>Buka <code className="text-slate-700 bg-slate-100 px-1 rounded font-mono text-[10px]">Event Viewer</code> di Windows.</li>
-                <li>Pilih folder <code className="text-slate-700 bg-slate-100 px-1 rounded font-mono text-[10px]">Windows Logs &gt; System</code> atau <code className="text-slate-700 bg-slate-100 px-1 rounded font-mono text-[10px]">Application</code>.</li>
-                <li>Klik <code className="text-slate-700 bg-slate-100 px-1 rounded font-mono text-[10px]">Filter Current Log...</code> dan set jangkauan waktu yang diinginkan.</li>
-                <li>Klik <code className="text-slate-700 bg-slate-100 px-1 rounded font-mono text-[10px]">Save Filtered Log File As...</code></li>
-                <li>Pilih format <strong className="text-blue-600 font-semibold">XML</strong> atau <strong className="text-blue-600 font-semibold">CSV</strong> untuk diunggah ke alat ini.</li>
-              </ol>
-            </div>
+
 
           </section>
 
@@ -906,10 +891,27 @@ export default function App() {
 
               {/* AI Running Loading State */}
               {isAnalyzing && (
-                <div className="mt-4 p-4 rounded-lg bg-slate-50 border border-slate-200 text-center flex flex-col items-center justify-center min-h-[140px]">
-                  <RefreshCw className="h-8 w-8 text-blue-600 animate-spin mb-3" />
-                  <p className="text-xs font-bold text-slate-800">{loadingMessages[loadingStep]}</p>
-                  <p className="text-[10px] text-slate-500 mt-1">Harap tunggu, sistem kecerdasan buatan sedang mengurai keterkaitan bukti log...</p>
+                <div className="mt-4 p-5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-center min-h-[120px] relative overflow-hidden shadow-inner">
+                  <div className="flex items-center gap-4 mb-4 z-10">
+                    <RefreshCw className="h-7 w-7 text-blue-600 animate-spin shrink-0" />
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">{loadingMessages[loadingStep]}</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Sistem kecerdasan buatan sedang mengurai keterkaitan bukti log...</p>
+                    </div>
+                    <div className="ml-auto text-xl font-black text-blue-600 font-mono">
+                      {analysisProgress}%
+                    </div>
+                  </div>
+                  
+                  {/* Progress Bar Container */}
+                  <div className="w-full bg-slate-200 rounded-full h-2.5 mb-1 z-10 overflow-hidden">
+                    <div 
+                      className="bg-blue-600 h-2.5 rounded-full transition-all duration-300 ease-out relative overflow-hidden" 
+                      style={{ width: `${analysisProgress}%` }}
+                    >
+                      <div className="absolute top-0 left-0 bottom-0 right-0 bg-white/20 animate-pulse"></div>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -1011,6 +1013,9 @@ export default function App() {
                   </div>
                 </div>
               )}
+
+              {/* Remediation Generator Module */}
+              {aiAnalysis && <RemediationGenerator analysisText={aiAnalysis} />}
             </div>
 
             {/* Split Screen Panel: 1) Logs Grid (Table) & 2) Active Log Inspection Detail Panel */}
@@ -1048,7 +1053,7 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {filteredLogs.map((log) => {
+                        {paginatedLogs.map((log) => {
                           const isSelected = selectedLog?.id === log.id;
                           return (
                             <tr
@@ -1099,6 +1104,31 @@ export default function App() {
                     </table>
                   )}
                 </div>
+                {/* Pagination Controls */}
+                {filteredLogs.length > 0 && (
+                  <div className="px-4 py-2 border-t border-slate-200 bg-slate-50 flex items-center justify-between text-xs">
+                    <span className="text-slate-500">
+                      Menampilkan {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, filteredLogs.length)} dari {filteredLogs.length}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                        className="px-2 py-1 rounded bg-white border border-slate-200 text-slate-600 disabled:opacity-50 hover:bg-slate-100"
+                      >
+                        Sebelumnya
+                      </button>
+                      <span className="font-bold text-slate-700">Hal {currentPage}</span>
+                      <button 
+                        onClick={() => setCurrentPage(p => Math.min(Math.ceil(filteredLogs.length / itemsPerPage), p + 1))}
+                        disabled={currentPage >= Math.ceil(filteredLogs.length / itemsPerPage)}
+                        className="px-2 py-1 rounded bg-white border border-slate-200 text-slate-600 disabled:opacity-50 hover:bg-slate-100"
+                      >
+                        Selanjutnya
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Log Detail Drawer (xl:col-span-5) */}
@@ -1360,6 +1390,16 @@ export default function App() {
               </div>
             )}
           </div>
+        </main>
+      )}
+
+      {activeTab === "analytics" && (
+        <main className="max-w-7xl mx-auto w-full p-4 flex-1 items-start">
+          <DashboardAnalytics 
+            logs={filteredLogs} 
+            severityStats={severityStats} 
+            categoryStats={categoryStats} 
+          />
         </main>
       )}
 

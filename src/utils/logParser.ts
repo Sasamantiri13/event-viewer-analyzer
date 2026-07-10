@@ -4,6 +4,7 @@
  */
 
 import { EventLogEntry } from "../types";
+import { parseEvtxFile } from "winevtx";
 
 // Clean string helpers
 function cleanValue(val: string | null): string {
@@ -14,50 +15,60 @@ function cleanValue(val: string | null): string {
 /**
  * Parses XML output exported from Windows Event Viewer
  */
-export function parseEventXml(xmlContent: string, fastScanMode: boolean = false): EventLogEntry[] {
+export async function parseEventXml(xmlContent: string, fastScanMode: boolean = false, onProgress?: (progress: number) => void): Promise<EventLogEntry[]> {
   const logs: EventLogEntry[] = [];
   try {
     const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(xmlContent, "text/xml");
-    
-    // Check for parser errors
-    const parserError = xmlDoc.querySelector("parsererror");
-    if (parserError) {
-      throw new Error("Invalid XML structure");
-    }
-
-    const eventNodes = xmlDoc.getElementsByTagName("Event");
-    
-    for (let i = 0; i < eventNodes.length; i++) {
-      const eventNode = eventNodes[i];
-      const systemNode = eventNode.getElementsByTagName("System")[0];
+    let start = 0;
+    let i = 0;
+    while (true) {
+      start = xmlContent.indexOf("<Event", start);
+      if (start === -1) break;
+      const end = xmlContent.indexOf("</Event>", start);
+      if (end === -1) break;
       
+      const eventStr = xmlContent.slice(start, end + 8);
+      start = end + 8;
+      
+      if (i > 0 && i % 2000 === 0) {
+        if (onProgress) onProgress(Math.round((start / xmlContent.length) * 100));
+        await new Promise(r => setTimeout(r, 0));
+      }
+      
+      const xmlDoc = parser.parseFromString(eventStr, "text/xml");
+      const eventNode = xmlDoc.documentElement;
+      if (!eventNode || (eventNode.localName !== "Event" && eventNode.nodeName !== "Event")) continue;
+
+      const elements = eventNode.getElementsByTagName("*");
+      
+      const getElem = (name: string) => {
+        for (let j = 0; j < elements.length; j++) {
+          if (elements[j].localName === name || elements[j].nodeName === name) return elements[j];
+        }
+        return null;
+      };
+
+      const systemNode = getElem("System");
       if (!systemNode) continue;
 
-      // 1. Get Event ID
-      const eventIdNode = systemNode.getElementsByTagName("EventID")[0];
+      const eventIdNode = getElem("EventID");
       const eventId = eventIdNode ? parseInt(eventIdNode.textContent || "0", 10) : 0;
 
-      // 2. Get Source / Provider
-      const providerNode = systemNode.getElementsByTagName("Provider")[0];
+      const providerNode = getElem("Provider");
       const source = providerNode ? providerNode.getAttribute("Name") || "Unknown Source" : "Unknown Source";
 
-      // 3. Get Timestamp
-      const timeNode = systemNode.getElementsByTagName("TimeCreated")[0];
+      const timeNode = getElem("TimeCreated");
       const timestamp = timeNode ? timeNode.getAttribute("SystemTime") || new Date().toISOString() : new Date().toISOString();
 
-      // 4. Get Level
-      const levelNode = systemNode.getElementsByTagName("Level")[0];
+      const levelNode = getElem("Level");
       const rawLevel = levelNode ? levelNode.textContent : "4";
       let level: "Critical" | "Error" | "Warning" | "Information" | "Unknown" = "Information";
-      
       if (rawLevel === "1") level = "Critical";
       else if (rawLevel === "2") level = "Error";
       else if (rawLevel === "3") level = "Warning";
       else if (rawLevel === "4") level = "Information";
 
-      // 5. Get Channel
-      const channelNode = systemNode.getElementsByTagName("Channel")[0];
+      const channelNode = getElem("Channel");
       let channel: "System" | "Application" | "Security" | "Code Integrity" | "Unknown" = "Unknown";
       const rawChannel = channelNode ? channelNode.textContent?.toLowerCase() : "";
       if (rawChannel?.includes("system")) channel = "System";
@@ -65,40 +76,40 @@ export function parseEventXml(xmlContent: string, fastScanMode: boolean = false)
       else if (rawChannel?.includes("security")) channel = "Security";
       else if (rawChannel?.includes("codeintegrity") || rawChannel?.includes("code integrity")) channel = "Code Integrity";
 
-      // 6. Get Computer
-      const computerNode = systemNode.getElementsByTagName("Computer")[0];
+      const computerNode = getElem("Computer");
       const computer = computerNode ? computerNode.textContent || "localhost" : "localhost";
 
-      // 7. Get Message / EventData
-      const eventDataNode = eventNode.getElementsByTagName("EventData")[0];
+      const eventDataNode = getElem("EventData");
       let message = "";
       
       if (eventDataNode) {
-        const dataNodes = eventDataNode.getElementsByTagName("Data");
+        const dataNodes = eventDataNode.getElementsByTagName("*");
         const dataParts: string[] = [];
         for (let j = 0; j < dataNodes.length; j++) {
-          const name = dataNodes[j].getAttribute("Name");
-          const val = dataNodes[j].textContent;
-          if (name) {
-            dataParts.push(`${name}: ${val}`);
-          } else if (val) {
-            dataParts.push(val);
+          if (dataNodes[j].localName === "Data" || dataNodes[j].nodeName === "Data") {
+            const name = dataNodes[j].getAttribute("Name");
+            const val = dataNodes[j].textContent;
+            if (name) dataParts.push(`${name}: ${val}`);
+            else if (val) dataParts.push(val);
           }
         }
         message = dataParts.join("\n") || "No detailed event data available.";
       } else {
-        // Fallback to rendering entire node text content or specific child elements
-        const renderingInfoNode = eventNode.getElementsByTagName("RenderingInfo")[0];
+        const renderingInfoNode = getElem("RenderingInfo");
         if (renderingInfoNode) {
-          const messageNode = renderingInfoNode.getElementsByTagName("Message")[0];
-          message = messageNode ? messageNode.textContent || "" : "";
+          const messageNodes = renderingInfoNode.getElementsByTagName("*");
+          for (let j = 0; j < messageNodes.length; j++) {
+             if (messageNodes[j].localName === "Message" || messageNodes[j].nodeName === "Message") {
+                message = messageNodes[j].textContent || "";
+                break;
+             }
+          }
         }
         if (!message) {
           message = eventNode.textContent?.trim().substring(0, 500) || "No message available.";
         }
       }
 
-      // Compute simple category
       const category = computeCategory(source, eventId, message);
 
       if (fastScanMode && level === "Information") {
@@ -115,8 +126,9 @@ export function parseEventXml(xmlContent: string, fastScanMode: boolean = false)
         computer,
         message,
         category,
-        raw: eventNode.outerHTML
+        raw: eventStr
       });
+      i++;
     }
   } catch (err) {
     console.error("Error parsing Event Log XML:", err);
@@ -127,14 +139,14 @@ export function parseEventXml(xmlContent: string, fastScanMode: boolean = false)
 /**
  * Parses CSV exported from Windows Event Viewer
  */
-export function parseEventCsv(csvContent: string, fastScanMode: boolean = false): EventLogEntry[] {
+export async function parseEventCsv(csvContent: string, fastScanMode: boolean = false, onProgress?: (progress: number) => void): Promise<EventLogEntry[]> {
   const logs: EventLogEntry[] = [];
   try {
-    const lines = csvContent.split(/\r?\n/);
-    if (lines.length < 2) return [];
+    let start = 0;
+    let end = csvContent.indexOf('\n');
+    if (end === -1) return [];
 
-    // Parse headers to understand columns dynamically
-    const headerLine = lines[0];
+    const headerLine = csvContent.slice(start, end).trim();
     const headers = parseCsvRow(headerLine).map(h => h.toLowerCase());
 
     const levelIdx = headers.indexOf("level");
@@ -143,9 +155,24 @@ export function parseEventCsv(csvContent: string, fastScanMode: boolean = false)
     const idIdx = headers.indexOf("event id") !== -1 ? headers.indexOf("event id") : headers.findIndex(h => h.includes("id"));
     const msgIdx = headers.indexOf("description") !== -1 ? headers.indexOf("description") : (headers.indexOf("information") !== -1 ? headers.indexOf("information") : headers.length - 1);
     
-    for (let i = 1; i < lines.length; i++) {
-      if (!lines[i].trim()) continue;
-      const columns = parseCsvRow(lines[i]);
+    start = end + 1;
+    let i = 1;
+    
+    while (start < csvContent.length) {
+      end = csvContent.indexOf('\n', start);
+      if (end === -1) end = csvContent.length;
+      
+      const line = csvContent.slice(start, end).trim();
+      start = end + 1;
+      i++;
+      
+      if (i % 5000 === 0) {
+        if (onProgress) onProgress(Math.round((start / csvContent.length) * 100));
+        await new Promise(r => setTimeout(r, 0));
+      }
+      
+      if (!line) continue;
+      const columns = parseCsvRow(line);
       if (columns.length < 2) continue;
 
       const rawLevel = levelIdx !== -1 ? cleanValue(columns[levelIdx]) : "Information";
@@ -231,7 +258,7 @@ function parseCsvRow(row: string): string[] {
 /**
  * Fallback Plain Text log parser
  */
-export function parseEventText(textContent: string, fastScanMode: boolean = false): EventLogEntry[] {
+export async function parseEventText(textContent: string, fastScanMode: boolean = false, onProgress?: (progress: number) => void): Promise<EventLogEntry[]> {
   const logs: EventLogEntry[] = [];
   try {
     // Try dividing into logical events based on timestamps
@@ -240,9 +267,16 @@ export function parseEventText(textContent: string, fastScanMode: boolean = fals
     
     let currentLog: Partial<EventLogEntry> | null = null;
     let count = 0;
+    const totalParts = parts.length;
 
-    for (let part of parts) {
-      part = part.trim();
+    for (let i = 0; i < parts.length; i++) {
+      let part = parts[i].trim();
+      
+      if (i % 3000 === 0) {
+        if (onProgress) onProgress(Math.round((i / totalParts) * 100));
+        await new Promise(r => setTimeout(r, 0));
+      }
+      
       if (!part) continue;
 
       // Check if this part is a timestamp line matching
@@ -391,4 +425,107 @@ export function computeCategory(source: string, eventId: number, message: string
   }
 
   return "General System";
+}
+
+/**
+ * Parses binary EVTX files directly in the browser
+ */
+export async function parseEventEvtx(buffer: ArrayBuffer, fastScanMode: boolean = false, onProgress?: (progress: number) => void): Promise<EventLogEntry[]> {
+  const logs: EventLogEntry[] = [];
+  try {
+    const uint8Array = new Uint8Array(buffer);
+    const records = parseEvtxFile(uint8Array as any);
+    
+    let i = 0;
+    const totalRecords = records.length;
+    for (const record of records) {
+      if (i > 0 && i % 2000 === 0) {
+        if (onProgress) onProgress(Math.round((i / totalRecords) * 100));
+        await new Promise(r => setTimeout(r, 0));
+      }
+      i++;
+      
+      const recEvent = record.event as any;
+      if (!record || !recEvent || !recEvent.Event) continue;
+      
+      const eventNode = recEvent.Event;
+      const systemNode = eventNode.System;
+      if (!systemNode) continue;
+
+      // Extract details from the parsed object
+      const eventId = systemNode.EventID ? parseInt(systemNode.EventID._text || systemNode.EventID, 10) : 0;
+      const source = systemNode.Provider?._Name || "Unknown Source";
+      
+      let timestamp = new Date().toISOString();
+      if (systemNode.TimeCreated && systemNode.TimeCreated._SystemTime) {
+        timestamp = systemNode.TimeCreated._SystemTime;
+      } else if (record.timestamp) {
+        timestamp = new Date(record.timestamp * 1000).toISOString();
+      }
+
+      const rawLevel = systemNode.Level;
+      let level: "Critical" | "Error" | "Warning" | "Information" | "Unknown" = "Information";
+      if (rawLevel == 1) level = "Critical";
+      else if (rawLevel == 2) level = "Error";
+      else if (rawLevel == 3) level = "Warning";
+      else if (rawLevel == 4) level = "Information";
+
+      const channelNode = systemNode.Channel || "";
+      const rawChannel = channelNode.toLowerCase ? channelNode.toLowerCase() : String(channelNode).toLowerCase();
+      let channel: "System" | "Application" | "Security" | "Code Integrity" | "Unknown" = "Unknown";
+      if (rawChannel.includes("system")) channel = "System";
+      else if (rawChannel.includes("application")) channel = "Application";
+      else if (rawChannel.includes("security")) channel = "Security";
+      else if (rawChannel.includes("codeintegrity") || rawChannel.includes("code integrity")) channel = "Code Integrity";
+
+      const computer = systemNode.Computer || "localhost";
+
+      let message = "";
+      const eventDataNode = eventNode.EventData;
+      if (eventDataNode && eventDataNode.Data) {
+        if (Array.isArray(eventDataNode.Data)) {
+          message = eventDataNode.Data.map((d: any) => {
+            if (typeof d === 'object') {
+              return (d._Name ? `${d._Name}: ` : '') + (d._text || JSON.stringify(d));
+            }
+            return String(d);
+          }).join("\n");
+        } else if (typeof eventDataNode.Data === 'object') {
+          message = (eventDataNode.Data._Name ? `${eventDataNode.Data._Name}: ` : '') + (eventDataNode.Data._text || JSON.stringify(eventDataNode.Data));
+        } else {
+          message = String(eventDataNode.Data);
+        }
+      } else if (eventNode.RenderingInfo && eventNode.RenderingInfo.Message) {
+        message = typeof eventNode.RenderingInfo.Message === 'object' 
+          ? (eventNode.RenderingInfo.Message._text || JSON.stringify(eventNode.RenderingInfo.Message))
+          : String(eventNode.RenderingInfo.Message);
+      }
+      
+      if (!message) {
+        message = "No message available.";
+      }
+
+      const category = computeCategory(source, eventId, message);
+
+      if (fastScanMode && level === "Information") {
+        continue;
+      }
+
+      logs.push({
+        id: `evtx-${record.recordID}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        timestamp,
+        level,
+        source,
+        eventId,
+        channel,
+        computer,
+        message,
+        category,
+        raw: JSON.stringify(eventNode)
+      });
+    }
+  } catch (err) {
+    console.error("Error parsing EVTX binary log:", err);
+  }
+  return logs;
 }
